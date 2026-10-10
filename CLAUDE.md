@@ -29,7 +29,21 @@ dotnet test                                         # xUnit, Bandvcard.Api.Tests
 dotnet test --filter "FullyQualifiedName~TestName"  # single test
 ```
 
-`Bandvcard.Api` uses controllers with `AddOData()` enabled but no EDM model or routes registered yet. `Microsoft.AspNetCore.OData` and `Npgsql.EntityFrameworkCore.PostgreSQL` are referenced; no `DbContext` or connection string exists.
+```bash
+dotnet tool restore                                               # once, installs dotnet-ef
+dotnet ef migrations add <Name> --project Bandvcard.Api
+dotnet ef database update --project Bandvcard.Api                 # needs the compose postgres running
+```
+
+Backend structure (`Bandvcard.Api`):
+
+- `Entities/`: `User`, `Contact`, `PostalCodeEntry` (the Ortsverzeichnis), in English; see the domain model below for the German spec terms.
+- `Data/BandvcardDbContext.cs`: EF Core context for PostgreSQL. It fills the audit fields of every `IAuditable` entity in `SaveChanges`/`SaveChangesAsync` and blocks changes to `CreatedAt`/`CreatedBy` on update. New audited entities only need to implement `IAuditable`.
+- `Data/ICurrentUser.cs`: supplies the name for `CreatedBy`/`UpdatedBy`. It reads the HTTP user and falls back to `"system"`, because authentication does not exist yet.
+- Migrations live in `Migrations/` and are not applied automatically at startup.
+- The connection string is `ConnectionStrings:Default`: `appsettings.Development.json` points at the compose postgres on localhost:5433 with the `.env.example` credentials; in compose it comes from the environment.
+- Controllers use `AddOData()`, but no EDM model, routes or controllers exist yet.
+- Tests use the EF Core in-memory provider, so they do not need a database.
 
 Full stack (run in the repo root; needs `.env`, copy from `.env.example`):
 
@@ -41,7 +55,7 @@ docker compose down            # add -v to also delete the postgres and minio vo
 
 - nginx is the only entry point for the apps: http://localhost:8080. `/api/` goes to the backend with the prefix kept (backend routes must be registered under `/api`), everything else goes to the frontend. TLS termination is not configured yet.
 - Host ports are bound to 127.0.0.1 and set in `.env`: postgres 5433 (not 5432), MinIO API 9000, MinIO console 9001.
-- The backend container gets `ConnectionStrings__Default` pointing at the `postgres` service. Nothing reads it yet, and no MinIO settings are passed to any service.
+- The backend container gets `ConnectionStrings__Default` pointing at the `postgres` service. No MinIO settings are passed to any service.
 - MinIO uses `cgr.dev/chainguard/minio:latest` because official `minio/minio` images are no longer published. Only `latest` is free there, so the version is not pinned.
 - The frontend image relies on `output: "standalone"` in `frontend/next.config.ts`.
 
@@ -79,6 +93,7 @@ The spec uses German names; the terms in parentheses are the spec's originals.
 - `ID`: UUID, generated automatically
 - Salutation (Anrede), first name (Vorname), last name (Nachname), street (Straße), house number (Straßennummer, text), city (Ort), company name (Firmenname), function (Funktion): all text
 - Postal code (Postleitzahl): foreign key to the postal code directory
+- Phone and email: not in the spec's Kontakt table, added in code because the capture flow extracts them
 - Photo link (Foto-Link): URL/path of the card image in MinIO
 - Audit fields `CreatedAt`, `CreatedBy`, `UpdatedAt`, `UpdatedBy`: set automatically by the backend on save, never by the client
 
