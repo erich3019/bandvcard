@@ -4,9 +4,9 @@ import { redirect } from "next/navigation";
 
 const backendUrl = process.env.BACKEND_URL ?? "http://localhost:5048";
 
-export type LoginMode = "password" | "microsoft" | "none";
+export type LoginMode = "development" | "microsoft" | "none";
 
-// Which login the backend offers; asked by the login page, so it needs no session.
+// Whether the backend has a login and which one; asked by the login page, so it needs no session.
 export async function getLoginMode(): Promise<LoginMode> {
   const response = await fetch(`${backendUrl}/api/auth/mode`, { cache: "no-store" });
   if (!response.ok) {

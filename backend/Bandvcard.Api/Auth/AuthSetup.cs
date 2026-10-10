@@ -1,5 +1,4 @@
 using System.Security.Claims;
-using System.Threading.RateLimiting;
 using Bandvcard.Api.Entities;
 using Microsoft.AspNetCore.Authentication;
 using Microsoft.AspNetCore.Authentication.Cookies;
@@ -14,7 +13,6 @@ public static class AuthSetup
 {
     public const string CookieName = "bandvcard.auth";
     public const string LoginPage = "/login";
-    public const string LoginRateLimit = "login";
 
     // Keep the session cookie small: only what the app needs.
     public static ClaimsPrincipal CreatePrincipal(User user, string? authenticationType) =>
@@ -27,30 +25,25 @@ public static class AuthSetup
             ],
             authenticationType));
 
-    // Login runs in the backend: OpenID Connect against Microsoft Entra ID, then a session cookie.
-    // nginx serves frontend and API on one origin, so the cookie covers both.
+    // Development: no login at all (DevAuthHandler).
+    // Every other environment: login in the backend via OpenID Connect against Microsoft Entra ID,
+    // then a session cookie. nginx serves frontend and API on one origin, so the cookie covers both.
     public static void AddBandvcardAuth(this WebApplicationBuilder builder)
     {
         var services = builder.Services;
         services.AddSingleton<AdminEmails>();
         services.AddScoped<UserSignInService>();
 
-        if (new TestLogins(builder.Configuration).Enabled && !builder.Environment.IsDevelopment())
-        {
-            throw new InvalidOperationException(
-                $"{TestLogins.Key} (TEST_LOGINS) replaces the Microsoft login with test passwords and is only " +
-                "allowed in the Development environment. Remove it or set ASPNETCORE_ENVIRONMENT=Development.");
-        }
+        services.AddAuthorizationBuilder()
+            .SetFallbackPolicy(new AuthorizationPolicyBuilder().RequireAuthenticatedUser().Build());
 
-        services.AddSingleton<TestLogins>();
-        // Slows down password guessing: a few attempts per minute and client address.
-        services.AddRateLimiter(options =>
+        if (builder.Environment.IsDevelopment())
         {
-            options.RejectionStatusCode = StatusCodes.Status429TooManyRequests;
-            options.AddPolicy(LoginRateLimit, context => RateLimitPartition.GetFixedWindowLimiter(
-                context.Connection.RemoteIpAddress?.ToString() ?? "unknown",
-                _ => new FixedWindowRateLimiterOptions { PermitLimit = 10, Window = TimeSpan.FromMinutes(1) }));
-        });
+            // No login while developing: every request is the developer user.
+            services.AddAuthentication(DevAuthHandler.SchemeName)
+                .AddScheme<AuthenticationSchemeOptions, DevAuthHandler>(DevAuthHandler.SchemeName, null);
+            return;
+        }
 
         var keysPath = builder.Configuration["DataProtection:KeysPath"];
         if (!string.IsNullOrEmpty(keysPath))
@@ -120,9 +113,6 @@ public static class AuthSetup
                 };
             });
         }
-
-        services.AddAuthorizationBuilder()
-            .SetFallbackPolicy(new AuthorizationPolicyBuilder().RequireAuthenticatedUser().Build());
     }
 
     private static async Task SignInUserAsync(TicketReceivedContext context)

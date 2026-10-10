@@ -30,7 +30,7 @@ public class ApiFactory : WebApplicationFactory<Program>
     protected override void ConfigureWebHost(IWebHostBuilder builder)
     {
         // Keep the tests independent of a developer's .env file.
-        builder.UseSetting(TestLogins.Key, "");
+        builder.UseSetting(DevAuthHandler.EmailKey, "");
         builder.UseSetting(AdminEmails.Key, ConfiguredAdmin);
         // Keep the tests independent of Entra values in a developer's .env file.
         builder.UseSetting("Entra:TenantId", "");

@@ -42,13 +42,12 @@ services:
     restart: unless-stopped
     environment:
       ConnectionStrings__Default: Host=postgres;Port=5432;Database=${POSTGRES_DB};Username=${POSTGRES_USER};Password=${POSTGRES_PASSWORD}
-      # Development is required for TEST_LOGINS; set ASPNETCORE_ENVIRONMENT=Production in .env for real use.
+      # Development: no login, every request is DEV_USER_EMAIL. Production: Microsoft Entra login.
       ASPNETCORE_ENVIRONMENT: ${ASPNETCORE_ENVIRONMENT:-Development}
-      # Test accounts (email:password,...): login with email and password instead of Microsoft.
-      Auth__TestLogins: ${TEST_LOGINS:-}
+      Auth__DevUserEmail: ${DEV_USER_EMAIL:-}
       # Comma-separated addresses that are made admin at every login.
       Auth__AdminEmails: ${ADMIN_EMAILS:-}
-      # Without test accounts, login stays disabled (503) until all three Entra values are set.
+      # Only used outside Development; login stays disabled (503) until all three are set.
       Entra__TenantId: ${ENTRA_TENANT_ID:-}
       Entra__ClientId: ${ENTRA_CLIENT_ID:-}
       Entra__ClientSecret: ${ENTRA_CLIENT_SECRET:-}

@@ -36,11 +36,11 @@ builder.Services.AddOpenApi();
 
 var app = builder.Build();
 
-if (app.Services.GetRequiredService<TestLogins>() is { Enabled: true } testLogins)
+if (app.Environment.IsDevelopment())
 {
     app.Logger.LogWarning(
-        "Test login with email and password is active instead of Microsoft, for: {Emails}",
-        string.Join(", ", testLogins.Emails));
+        "Development environment: there is NO login, every request acts as the developer user. " +
+        "Set ASPNETCORE_ENVIRONMENT=Production to require the Microsoft login.");
 }
 
 // Configure the HTTP request pipeline.
@@ -53,7 +53,6 @@ app.UseForwardedHeaders();
 app.UseHttpsRedirection();
 
 app.UseAuthentication();
-app.UseRateLimiter();
 app.UseAuthorization();
 
 app.MapControllers();

@@ -9,16 +9,21 @@ const links = [
 
 const linkStyle = "text-zinc-600 hover:underline dark:text-zinc-400";
 
-// Only a convenience: the backend decides who may manage users.
-async function AdminLinks() {
+// Asking for the user is also what protects every page in this frame: without a valid
+// session, getCurrentUser() redirects to the login page.
+async function Account() {
   const user = await getCurrentUser();
-  if (user.role !== "Admin") {
-    return null;
-  }
   return (
-    <Link href="/benutzer" className={linkStyle}>
-      Benutzer
-    </Link>
+    <div className="ml-auto flex items-center gap-4">
+      <span className="hidden text-zinc-600 sm:inline dark:text-zinc-400">{user.email}</span>
+      {user.loginRequired && (
+        <form action="/api/auth/logout" method="post">
+          <button type="submit" className={linkStyle}>
+            Abmelden
+          </button>
+        </form>
+      )}
+    </div>
   );
 }
 
@@ -37,7 +42,7 @@ export function PageShell({ title, children }: { title: string; children: React.
             </Link>
           ))}
           <Suspense>
-            <AdminLinks />
+            <Account />
           </Suspense>
         </div>
       </nav>

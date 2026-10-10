@@ -20,11 +20,13 @@ async function Welcome() {
       >
         Visitenkarte erfassen
       </Link>
-      <form action="/api/auth/logout" method="post">
-        <button type="submit" className="rounded-full border border-black/10 px-5 py-2 dark:border-white/20">
-          Abmelden
-        </button>
-      </form>
+      {user.loginRequired && (
+        <form action="/api/auth/logout" method="post">
+          <button type="submit" className="rounded-full border border-black/10 px-5 py-2 dark:border-white/20">
+            Abmelden
+          </button>
+        </form>
+      )}
     </>
   );
 }

@@ -1,8 +1,10 @@
 using System.Net;
+using System.Net.Http.Json;
 using System.Text.Json;
 using Bandvcard.Api.Auth;
 using Bandvcard.Api.Data;
 using Bandvcard.Api.Entities;
+using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Mvc.Testing;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
@@ -10,6 +12,7 @@ using Microsoft.Extensions.DependencyInjection;
 
 namespace Bandvcard.Api.Tests;
 
+// Uses the header-based test scheme of ApiFactory: who is allowed in once there is a login.
 public class AuthTests(ApiFactory factory) : IClassFixture<ApiFactory>
 {
     private HttpClient CreateClient(string? user = null)
@@ -44,33 +47,6 @@ public class AuthTests(ApiFactory factory) : IClassFixture<ApiFactory>
         Assert.Equal(HttpStatusCode.OK, response.StatusCode);
         var me = JsonDocument.Parse(await response.Content.ReadAsStringAsync()).RootElement;
         Assert.Equal("erika@example.com", me.GetProperty("email").GetString());
-    }
-
-    [Fact]
-    public async Task Login_WithoutEntraConfiguration_Returns503()
-    {
-        var response = await CreateClient().GetAsync("/api/auth/login");
-
-        Assert.Equal(HttpStatusCode.ServiceUnavailable, response.StatusCode);
-    }
-
-    [Fact]
-    public async Task PasswordLogin_DoesNotExist_WithoutTestLogins()
-    {
-        var client = CreateClient();
-        var form = new FormUrlEncodedContent(new Dictionary<string, string> { ["email"] = "a@b.c", ["password"] = "x" });
-
-        Assert.Equal(HttpStatusCode.NotFound, (await client.PostAsync("/api/auth/login", form)).StatusCode);
-        Assert.Contains("\"mode\":\"none\"", await client.GetStringAsync("/api/auth/mode"));
-    }
-
-    [Fact]
-    public async Task Logout_IsAllowedAnonymouslyAndRedirectsToLoginPage()
-    {
-        var response = await CreateClient().PostAsync("/api/auth/logout", null);
-
-        Assert.Equal(HttpStatusCode.Redirect, response.StatusCode);
-        Assert.Equal("/login", response.Headers.Location?.OriginalString);
     }
 }
 
@@ -124,17 +100,29 @@ public class UserSignInServiceTests
     }
 
     [Fact]
-    public async Task LaterLogin_KeepsExistingUserUnchanged()
+    public async Task LaterLogin_RefreshesTheNameAndKeepsEverythingElse()
     {
-        _db.Users.Add(new User { Email = "erika@example.com", FirstName = "Erika", LastName = "Muster", Phone = "123" });
+        _db.Users.Add(new User
+        {
+            Email = "erika@example.com",
+            FirstName = "Erika",
+            LastName = "Muster",
+            Phone = "123",
+            Role = UserRole.Admin,
+        });
         await _db.SaveChangesAsync();
 
-        var user = await CreateService().SignInAsync("ERIKA@example.com", "Other", "Name");
+        var user = await CreateService().SignInAsync("ERIKA@example.com", "Erika", "Beispiel");
 
         Assert.NotNull(user);
         var stored = await _db.Users.SingleAsync();
-        Assert.Equal("Erika", stored.FirstName);
+        Assert.Equal("Beispiel", stored.LastName);
         Assert.Equal("123", stored.Phone);
+        Assert.Equal(UserRole.Admin, stored.Role);
+
+        // A login that reports no name leaves the stored one alone.
+        await CreateService().SignInAsync("erika@example.com", null, null);
+        Assert.Equal("Erika", (await _db.Users.SingleAsync()).FirstName);
     }
 
     [Fact]
@@ -155,146 +143,160 @@ public class UserSignInServiceTests
     }
 }
 
-public class TestLoginFactory : ApiFactory
+// The real authentication of the Development environment: no login.
+public class DevModeFactory : ApiFactory
 {
-    public const string Email = "dev@example.com";
-    public const string Password = "correct horse";
-
     protected override bool UseTestAuth => false;
 
-    protected override void ConfigureWebHost(Microsoft.AspNetCore.Hosting.IWebHostBuilder builder)
+    protected virtual string DevUser => "Developer@Example.com";
+
+    protected override void ConfigureWebHost(IWebHostBuilder builder)
     {
         base.ConfigureWebHost(builder);
-        builder.UseSetting(TestLogins.Key, $"Dev@Example.com:{Password}, second@example.com:other");
+        builder.UseSetting(DevAuthHandler.EmailKey, DevUser);
     }
 }
 
-public class TestLoginInProductionFactory : TestLoginFactory
+public class DevModeAdminFactory : DevModeFactory
 {
-    protected override void ConfigureWebHost(Microsoft.AspNetCore.Hosting.IWebHostBuilder builder)
+    protected override string DevUser => ConfiguredAdmin;
+}
+
+// The real authentication of every other environment: Microsoft login and session cookie.
+public class ProductionFactory : ApiFactory
+{
+    protected override bool UseTestAuth => false;
+
+    protected override void ConfigureWebHost(IWebHostBuilder builder)
     {
         base.ConfigureWebHost(builder);
         builder.UseSetting("environment", "Production");
+        // Must not matter outside Development.
+        builder.UseSetting(DevAuthHandler.EmailKey, "developer@example.com");
     }
 }
 
-public class TestLoginTests
+public class ProductionWithEntraFactory : ProductionFactory
 {
-    private static HttpClient CreateClient(TestLoginFactory factory) =>
+    protected override void ConfigureWebHost(IWebHostBuilder builder)
+    {
+        base.ConfigureWebHost(builder);
+        builder.UseSetting("Entra:TenantId", "00000000-0000-0000-0000-000000000001");
+        builder.UseSetting("Entra:ClientId", "00000000-0000-0000-0000-000000000002");
+        builder.UseSetting("Entra:ClientSecret", "not-a-real-secret");
+    }
+}
+
+public class EnvironmentAuthTests
+{
+    private const string DevEmail = "developer@example.com";
+
+    private static HttpClient CreateClient(ApiFactory factory) =>
         factory.CreateClient(new WebApplicationFactoryClientOptions { AllowAutoRedirect = false });
 
-    private static Task<HttpResponseMessage> LoginAsync(
-        HttpClient client, string email, string password, string? returnUrl = null)
-    {
-        var form = new Dictionary<string, string> { ["email"] = email, ["password"] = password };
-        if (returnUrl is not null)
-        {
-            form["returnUrl"] = returnUrl;
-        }
+    private static async Task<JsonElement> JsonAsync(HttpResponseMessage response) =>
+        JsonDocument.Parse(await response.Content.ReadAsStringAsync()).RootElement;
 
-        return client.PostAsync("/api/auth/login", new FormUrlEncodedContent(form));
-    }
-
-    private static async Task ChangeUserAsync(TestLoginFactory factory, Action<User> change)
+    [Fact]
+    public async Task Development_NeedsNoLogin_AndStoresTheDeveloperAsUser()
     {
+        await using var factory = new DevModeFactory();
+        var client = CreateClient(factory);
+
+        var me = await JsonAsync(await client.GetAsync("/api/auth/me"));
+        Assert.Equal(DevEmail, me.GetProperty("email").GetString());
+        Assert.Equal("User", me.GetProperty("role").GetString());
+        Assert.False(me.GetProperty("loginRequired").GetBoolean());
+        Assert.Contains("\"mode\":\"development\"", await client.GetStringAsync("/api/auth/mode"));
+
+        var contact = await JsonAsync(await client.PostAsJsonAsync("/api/Contacts", new { lastName = "Dev" }));
+        Assert.Equal(DevEmail, contact.GetProperty("createdBy").GetString());
+
         using var scope = factory.Services.CreateScope();
-        var db = scope.ServiceProvider.GetRequiredService<BandvcardDbContext>();
-        change(await db.Users.SingleAsync(u => u.Email == TestLoginFactory.Email));
-        await db.SaveChangesAsync();
+        var users = await scope.ServiceProvider.GetRequiredService<BandvcardDbContext>().Users.ToListAsync();
+        Assert.Equal([DevEmail], users.Select(u => u.Email));
     }
 
     [Fact]
-    public async Task Login_SignsInCreatesUserAndStopsWorkingWhenUserIsDeactivated()
+    public async Task Development_LoginAndLogoutJustLeadIntoTheApp()
     {
-        await using var factory = new TestLoginFactory();
+        await using var factory = new DevModeFactory();
         var client = CreateClient(factory);
 
-        Assert.Equal(HttpStatusCode.Unauthorized, (await client.GetAsync("/api/auth/me")).StatusCode);
+        Assert.Equal("/kontakte", (await client.GetAsync("/api/auth/login?returnUrl=/kontakte")).Headers.Location?.OriginalString);
+        Assert.Equal("/", (await client.GetAsync("/api/auth/login?returnUrl=https://evil.example/")).Headers.Location?.OriginalString);
+        Assert.Equal("/", (await client.PostAsync("/api/auth/logout", null)).Headers.Location?.OriginalString);
+    }
 
-        var login = await LoginAsync(client, " DEV@example.com", TestLoginFactory.Password, "/somewhere");
-        Assert.Equal(HttpStatusCode.Redirect, login.StatusCode);
-        Assert.Equal("/somewhere", login.Headers.Location?.OriginalString);
+    [Fact]
+    public async Task Development_TheDeveloperIsAdminOnlyIfConfiguredAsAdmin()
+    {
+        await using var user = new DevModeFactory();
+        Assert.Equal(HttpStatusCode.Forbidden, (await CreateClient(user).GetAsync("/api/Users")).StatusCode);
 
-        var me = await client.GetAsync("/api/auth/me");
-        Assert.Equal(HttpStatusCode.OK, me.StatusCode);
-        Assert.Contains(TestLoginFactory.Email, await me.Content.ReadAsStringAsync());
-
-        // A role change applies to the running session, without a new login.
-        Assert.Equal(HttpStatusCode.Forbidden, (await client.GetAsync("/api/Users")).StatusCode);
-        await ChangeUserAsync(factory, user => user.Role = UserRole.Admin);
+        await using var admin = new DevModeAdminFactory();
+        var client = CreateClient(admin);
         Assert.Equal(HttpStatusCode.OK, (await client.GetAsync("/api/Users")).StatusCode);
-        Assert.Contains("\"role\":\"Admin\"", await (await client.GetAsync("/api/auth/me")).Content.ReadAsStringAsync());
+        Assert.Equal("Admin", (await JsonAsync(await client.GetAsync("/api/auth/me"))).GetProperty("role").GetString());
+    }
 
-        await ChangeUserAsync(factory, user => user.Status = UserStatus.Inactive);
+    [Fact]
+    public async Task Development_AnInactiveDeveloperIsLockedOut()
+    {
+        await using var factory = new DevModeFactory();
+        var client = CreateClient(factory);
+        await client.GetAsync("/api/auth/me");
+
+        using (var scope = factory.Services.CreateScope())
+        {
+            var db = scope.ServiceProvider.GetRequiredService<BandvcardDbContext>();
+            (await db.Users.SingleAsync()).Status = UserStatus.Inactive;
+            await db.SaveChangesAsync();
+        }
 
         Assert.Equal(HttpStatusCode.Unauthorized, (await client.GetAsync("/api/auth/me")).StatusCode);
-        var again = await LoginAsync(client, TestLoginFactory.Email, TestLoginFactory.Password);
-        Assert.Equal("/login?error=inactive", again.Headers.Location?.OriginalString);
     }
 
     [Theory]
-    [InlineData(TestLoginFactory.Email, "wrong")]
-    [InlineData(TestLoginFactory.Email, "")]
-    [InlineData(TestLoginFactory.Email, "other")] // the password of the second account
-    [InlineData("unknown@example.com", TestLoginFactory.Password)]
-    [InlineData("", "")]
-    public async Task Login_WithWrongCredentials_IsRefused(string email, string password)
+    [InlineData("/api/auth/me")]
+    [InlineData("/api/Contacts")]
+    [InlineData("/api/photos/2026/10/00000000000000000000000000000000.jpg")]
+    public async Task Production_RequiresALogin(string url)
     {
-        await using var factory = new TestLoginFactory();
+        await using var factory = new ProductionFactory();
+
+        var response = await CreateClient(factory).GetAsync(url);
+
+        Assert.Equal(HttpStatusCode.Unauthorized, response.StatusCode);
+    }
+
+    [Fact]
+    public async Task Production_WithoutEntraConfiguration_HasNoLogin()
+    {
+        await using var factory = new ProductionFactory();
         var client = CreateClient(factory);
 
-        var login = await LoginAsync(client, email, password);
+        Assert.Contains("\"mode\":\"none\"", await client.GetStringAsync("/api/auth/mode"));
+        Assert.Equal(HttpStatusCode.ServiceUnavailable, (await client.GetAsync("/api/auth/login")).StatusCode);
+    }
 
-        Assert.Equal("/login?error=credentials", login.Headers.Location?.OriginalString);
+    [Fact]
+    public async Task Production_WithEntraConfiguration_OffersTheMicrosoftLogin()
+    {
+        await using var factory = new ProductionWithEntraFactory();
+        var client = CreateClient(factory);
+
+        Assert.Contains("\"mode\":\"microsoft\"", await client.GetStringAsync("/api/auth/mode"));
         Assert.Equal(HttpStatusCode.Unauthorized, (await client.GetAsync("/api/auth/me")).StatusCode);
     }
 
     [Fact]
-    public async Task Login_DoesNotRedirectToForeignSites()
+    public async Task Production_LogoutLeadsToTheLoginPage()
     {
-        await using var factory = new TestLoginFactory();
+        await using var factory = new ProductionFactory();
 
-        var login = await LoginAsync(
-            CreateClient(factory), TestLoginFactory.Email, TestLoginFactory.Password, "https://evil.example/");
+        var response = await CreateClient(factory).PostAsync("/api/auth/logout", null);
 
-        Assert.Equal("/", login.Headers.Location?.OriginalString);
-    }
-
-    [Fact]
-    public async Task Login_IsRateLimited()
-    {
-        await using var factory = new TestLoginFactory();
-        var client = CreateClient(factory);
-
-        var statuses = new List<HttpStatusCode>();
-        for (var attempt = 0; attempt < 12; attempt++)
-        {
-            statuses.Add((await LoginAsync(client, TestLoginFactory.Email, "guess" + attempt)).StatusCode);
-        }
-
-        Assert.All(statuses.Take(10), status => Assert.Equal(HttpStatusCode.Redirect, status));
-        Assert.Equal(HttpStatusCode.TooManyRequests, statuses[^1]);
-    }
-
-    [Fact]
-    public async Task Mode_TellsTheLoginPageToAskForAPassword()
-    {
-        await using var factory = new TestLoginFactory();
-        var client = CreateClient(factory);
-
-        Assert.Contains("\"mode\":\"password\"", await client.GetStringAsync("/api/auth/mode"));
-        // The Microsoft entry point leads back to the form instead of signing anyone in.
-        var microsoft = await client.GetAsync("/api/auth/login");
-        Assert.Equal("/login", microsoft.Headers.Location?.OriginalString);
-        Assert.Equal(HttpStatusCode.Unauthorized, (await client.GetAsync("/api/auth/me")).StatusCode);
-    }
-
-    [Fact]
-    public async Task TestLogins_OutsideDevelopment_PreventStartup()
-    {
-        await using var factory = new TestLoginInProductionFactory();
-
-        var error = Assert.Throws<InvalidOperationException>(() => factory.CreateClient());
-        Assert.Contains("TEST_LOGINS", error.Message);
+        Assert.Equal("/login", response.Headers.Location?.OriginalString);
     }
 }

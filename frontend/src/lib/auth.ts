@@ -7,6 +7,8 @@ export type CurrentUser = {
   firstName: string | null;
   lastName: string | null;
   role: "Admin" | "User";
+  // False in the backend's Development environment, where nobody logs in or out.
+  loginRequired: boolean;
 };
 
 // The backend owns the session; this asks it who the cookie belongs to.

@@ -8,7 +8,8 @@ public class UserSignInService(BandvcardDbContext db, AdminEmails adminEmails)
 {
     public static string NormalizeEmail(string email) => email.Trim().ToLowerInvariant();
 
-    // Returns the user for a successful identity provider login, creating it on first login.
+    // Returns the user for a successful login, creating it on first login and refreshing its
+    // name on later ones. The user table only ever holds people who have logged in.
     // Returns null if the user exists but is inactive.
     public async Task<User?> SignInAsync(string email, string? firstName, string? lastName)
     {
@@ -23,6 +24,13 @@ public class UserSignInService(BandvcardDbContext db, AdminEmails adminEmails)
                 LastName = lastName ?? "",
             };
             db.Users.Add(user);
+        }
+
+        else
+        {
+            // Nobody edits users in the app, so the names follow what the login reports.
+            user.FirstName = firstName ?? user.FirstName;
+            user.LastName = lastName ?? user.LastName;
         }
 
         if (adminEmails.Contains(email))
