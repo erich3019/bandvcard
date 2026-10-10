@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Repository state
 
-`frontend/` and `backend/` are fresh scaffolds with no domain code yet. `bandvcard_v1.0.0_context.docx` (German) is the project context/spec for v1.0.0; the stack, flow and domain model sections below are derived from it. The whole stack runs via Docker Compose.
+A working application: Next.js frontend in `frontend/`, .NET OData backend in `backend/`, run together with PostgreSQL, MinIO and nginx via Docker Compose. `bandvcard_v1.0.0_context.docx` (German) is the original project context/spec for v1.0.0; the stack, capture flow and domain model sections at the end are derived from it. The application has since grown beyond the spec (login, roles, mobile number, opportunities, Abacus status, dictation); those additions are described in the sections in between, and where they differ from the spec, this file and the code are right.
 
 To re-read the spec: `pandoc -t markdown bandvcard_v1.0.0_context.docx` (falls back to `unzip -p bandvcard_v1.0.0_context.docx word/document.xml` if pandoc is missing).
 
@@ -140,7 +140,7 @@ Both are additions to the spec, requested later.
 - Frontend: both live on the contact detail page in `kontakte/[id]/contact-extras.tsx`; the list marks released contacts.
 - **Dictation:** an opportunity can be dictated in German with the browser's built-in speech recognition (Web Speech API, `lib/dictation.ts`): Chrome, Edge and Safari, not Firefox, HTTPS only. The browser usually sends the audio to its vendor for recognition, a deliberate choice, unlike the card OCR that stays on the device. One utterance per press (`continuous = false`, because continuous mode repeats text on Android); the text is appended to the field and still has to be saved.
 
-## Planned stack
+## Stack
 
 | Layer | Technology |
 | --- | --- |
@@ -176,9 +176,16 @@ The spec uses German names; the terms in parentheses are the spec's originals.
 
 **Postal code directory (Ortsverzeichnis)**: postal code (primary key), place name (Ortsname), optional state/country (Bundesland / Land). It normalises postal codes and place names and is linked to contacts via the postal code.
 
-## Open decisions in v1.0.0
+## Open points
 
-These are explicitly undecided in the spec; ask rather than assume:
+Undecided; ask rather than assume:
 
-- Import source for postal code data (e.g. Deutsche Post, OpenPLZ)
+- Import source for postal code data (e.g. Deutsche Post, OpenPLZ); the directory currently fills itself from captured contacts
 - MinIO access rights (a single bucket and the root credentials are used for now)
+- A real TLS certificate and host name for production (the certificate is self-signed, no HSTS)
+
+Built but never run for real, as of 2026-10-10; treat as unverified until someone has tried them:
+
+- The Microsoft Entra login end to end (callback, claims, session cookie): there is no app registration yet. Only the redirect to Microsoft was checked with placeholder values.
+- Everything that needs a browser with camera or microphone was only tested through its pure functions and the HTTP API: taking a photo, the in-browser image enhancement and OCR, dictation of opportunities, contacts and single fields. The user tried card capture on a phone; dictation has no feedback yet.
+- The n8n workflow for Abacus does not exist in this repository; the API it would use was tested with curl.
