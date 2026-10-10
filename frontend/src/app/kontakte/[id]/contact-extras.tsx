@@ -1,9 +1,16 @@
 "use client";
 
 import { useRouter } from "next/navigation";
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { createOpportunity, deleteOpportunity, SessionExpiredError, setAbacusStatus } from "@/lib/api";
 import { abacusStatusLabels, type Contact, OPPORTUNITY_MAX_LENGTH } from "@/lib/contacts";
+import {
+  appendDictation,
+  createSpeechRecognition,
+  readSpeechResult,
+  speechErrorMessage,
+  type SpeechRecognitionLike,
+} from "@/lib/dictation";
 
 // Fixed time zone, so server and browser render the same text.
 const date = new Intl.DateTimeFormat("de-DE", { dateStyle: "medium", timeZone: "Europe/Berlin" });
@@ -19,7 +26,49 @@ export function ContactExtras({ contact }: { contact: Contact }) {
   const [text, setText] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  // Dictation: what is being said right now, shown until the recogniser settles on it.
+  const [listening, setListening] = useState(false);
+  const [interim, setInterim] = useState("");
+  const recognition = useRef<SpeechRecognitionLike | null>(null);
   const opportunities = contact.opportunities ?? [];
+
+  // Leaving the page ends a running dictation.
+  useEffect(() => () => recognition.current?.abort(), []);
+
+  function toggleDictation() {
+    if (recognition.current) {
+      recognition.current.stop();
+      return;
+    }
+    const speech = createSpeechRecognition("de-DE");
+    if (!speech) {
+      setError("Dieser Browser unterstützt keine Spracheingabe. Sie funktioniert in Chrome, Edge und Safari.");
+      return;
+    }
+
+    setError(null);
+    speech.onresult = (event) => {
+      const spoken = readSpeechResult(event);
+      if (spoken.final) {
+        setText((current) => appendDictation(current, spoken.final, OPPORTUNITY_MAX_LENGTH));
+      }
+      setInterim(spoken.interim);
+    };
+    speech.onerror = (event) => {
+      const message = speechErrorMessage(event.error);
+      if (message) {
+        setError(message);
+      }
+    };
+    speech.onend = () => {
+      recognition.current = null;
+      setListening(false);
+      setInterim("");
+    };
+    recognition.current = speech;
+    setListening(true);
+    speech.start();
+  }
   const status = contact.abacusStatus;
 
   async function run(action: () => Promise<void>, failure: string) {
@@ -99,17 +148,37 @@ export function ContactExtras({ contact }: { contact: Contact }) {
               className="rounded-lg border border-black/15 bg-white px-3 py-2 text-base dark:border-white/20 dark:bg-zinc-900"
             />
           </label>
-          <div className="flex items-center justify-between gap-4">
+          {listening && (
+            <p role="status" className="text-sm text-zinc-600 dark:text-zinc-400">
+              {interim ? `… ${interim}` : "Sprechen Sie jetzt …"}
+            </p>
+          )}
+          <div className="flex flex-wrap items-center justify-between gap-4">
             <span className="text-sm text-zinc-600 dark:text-zinc-400">
               {text.length} / {OPPORTUNITY_MAX_LENGTH} Zeichen
             </span>
-            <button
-              type="submit"
-              disabled={busy || text.trim() === ""}
-              className="h-10 rounded-full bg-foreground px-5 font-medium text-background disabled:opacity-50"
-            >
-              Hinzufügen
-            </button>
+            <div className="flex gap-3">
+              <button
+                type="button"
+                disabled={busy || (!listening && text.length >= OPPORTUNITY_MAX_LENGTH)}
+                aria-pressed={listening}
+                onClick={toggleDictation}
+                className={
+                  listening
+                    ? "h-10 rounded-full bg-red-700 px-5 font-medium text-white"
+                    : "h-10 rounded-full border border-black/10 px-5 disabled:opacity-50 dark:border-white/20"
+                }
+              >
+                {listening ? "Aufnahme beenden" : "Diktieren"}
+              </button>
+              <button
+                type="submit"
+                disabled={busy || listening || text.trim() === ""}
+                className="h-10 rounded-full bg-foreground px-5 font-medium text-background disabled:opacity-50"
+              >
+                Hinzufügen
+              </button>
+            </div>
           </div>
         </form>
       </section>
