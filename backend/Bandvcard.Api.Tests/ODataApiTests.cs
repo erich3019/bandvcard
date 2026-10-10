@@ -154,6 +154,19 @@ public class ODataApiTests : IClassFixture<ApiFactory>
     }
 
     [Fact]
+    public async Task Contact_KeepsPhoneAndMobileSeparately()
+    {
+        var create = await _client.PostAsJsonAsync(
+            "/api/Contacts", new { lastName = "Nummern", phone = "+41 31 333 80 22", mobile = "+41 79 321 69 27" });
+        var id = (await ReadJsonAsync(create)).GetProperty("id").GetGuid();
+
+        var read = await ReadJsonAsync(await _client.GetAsync($"/api/Contacts({id})"));
+
+        Assert.Equal("+41 31 333 80 22", read.GetProperty("phone").GetString());
+        Assert.Equal("+41 79 321 69 27", read.GetProperty("mobile").GetString());
+    }
+
+    [Fact]
     public async Task Contacts_SupportFilterAndCount()
     {
         await _client.PostAsJsonAsync("/api/Contacts", new { lastName = "Filter-A", companyName = "Acme" });

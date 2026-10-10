@@ -27,6 +27,7 @@ describe("parseCard", () => {
       postalCode: "80331",
       city: "München",
       phone: "+49 89 123456-0",
+      mobile: "+49 171 2345678",
       email: "erika.mustermann@muster-gmbh.de",
     });
   });
@@ -54,12 +55,30 @@ describe("parseCard", () => {
     });
   });
 
-  it("uses the mobile number when there is no landline and never the fax", () => {
+  it("puts a mobile number into the mobile field and never uses the fax", () => {
     const fields = parseCard("Frau Petra Beispiel\nFax 030 1111111\nMobil 0171 2222222");
 
     expect(fields.salutation).toBe("Frau");
     expect(fields.lastName).toBe("Beispiel");
-    expect(fields.phone).toBe("0171 2222222");
+    expect(fields.phone).toBe("");
+    expect(fields.mobile).toBe("0171 2222222");
+  });
+
+  it("recognises mobile numbers without a label by their network prefix", () => {
+    expect(parseCard("+41 31 333 80 22\n+41 79 321 69 27")).toMatchObject({
+      phone: "+41 31 333 80 22",
+      mobile: "+41 79 321 69 27",
+    });
+    expect(parseCard("0049 171 2345678")).toMatchObject({ phone: "", mobile: "0049 171 2345678" });
+    // Without a country code "07…" can be a German landline, so it stays a phone number.
+    expect(parseCard("0711 1234567")).toMatchObject({ phone: "0711 1234567", mobile: "" });
+  });
+
+  it("prefers the labelled landline over an unlabelled number", () => {
+    expect(parseCard("030 9999999\nTel. 030 1234567\nM 0160 7654321")).toMatchObject({
+      phone: "030 1234567",
+      mobile: "0160 7654321",
+    });
   });
 
   it("accepts a street without a typical suffix directly before the postal code", () => {
@@ -98,7 +117,7 @@ www.aberegg-consulting.ch
 T +41 31 33380 22
 M +41 79 321 69 27`);
 
-    expect(fields).toEqual({ ...gasser, phone: "+41 31 33380 22" });
+    expect(fields).toEqual({ ...gasser, phone: "+41 31 33380 22", mobile: "+41 79 321 69 27" });
   });
 
   it("copes with heavy noise around every line", () => {
@@ -116,7 +135,7 @@ T+41313338022 §
 
 M+41793216927 B`);
 
-    expect(fields).toEqual({ ...gasser, phone: "+41313338022" });
+    expect(fields).toEqual({ ...gasser, phone: "+41313338022", mobile: "+41793216927" });
   });
 
   it("finds the name when OCR merges it with the logo text, and ignores the slogan", () => {
@@ -155,6 +174,7 @@ J`);
       postalCode: "1234",
       city: "Irgendwo",
       phone: "+99 12 345 67 89-012",
+      mobile: "",
       email: "b.beispiel@sample-corporation.com",
     });
   });

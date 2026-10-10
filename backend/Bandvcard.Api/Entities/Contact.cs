@@ -14,6 +14,7 @@ public class Contact : IAuditable
     public string? CompanyName { get; set; }
     public string? Function { get; set; }
     public string? Phone { get; set; }
+    public string? Mobile { get; set; }
     public string? Email { get; set; }
     // URL or path of the business card photo in MinIO.
     public string? PhotoLink { get; set; }

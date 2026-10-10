@@ -12,7 +12,7 @@ export type Contact = { [Field in keyof CardFields]: string | null } & {
 
 export type ContactSummary = Pick<
   Contact,
-  "id" | "firstName" | "lastName" | "companyName" | "function" | "city" | "email" | "phone"
+  "id" | "firstName" | "lastName" | "companyName" | "function" | "city" | "email" | "phone" | "mobile"
 >;
 
 export function toCardFields(contact: Contact): CardFields {
@@ -39,7 +39,7 @@ const SEARCH_FIELDS = ["lastName", "firstName", "companyName", "city", "email"];
 // that may appear in any of the search fields.
 export function contactListQuery(search: string, page: number): string {
   const params = [
-    "$select=id,firstName,lastName,companyName,function,city,email,phone",
+    "$select=id,firstName,lastName,companyName,function,city,email,phone,mobile",
     "$orderby=lastName,firstName,companyName",
     `$top=${CONTACTS_PAGE_SIZE}`,
     `$skip=${(page - 1) * CONTACTS_PAGE_SIZE}`,

@@ -13,6 +13,7 @@ export const contactFieldLabels: { name: keyof CardFields; label: string; type?:
   { name: "postalCode", label: "Postleitzahl" },
   { name: "city", label: "Ort" },
   { name: "phone", label: "Telefon", type: "tel" },
+  { name: "mobile", label: "Mobil", type: "tel" },
   { name: "email", label: "E-Mail", type: "email" },
 ];
 

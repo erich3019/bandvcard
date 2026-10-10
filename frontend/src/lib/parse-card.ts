@@ -12,6 +12,7 @@ export type CardFields = {
   postalCode: string;
   city: string;
   phone: string;
+  mobile: string;
   email: string;
 };
 
@@ -26,6 +27,7 @@ export const emptyCardFields: CardFields = {
   postalCode: "",
   city: "",
   phone: "",
+  mobile: "",
   email: "",
 };
 
@@ -37,6 +39,9 @@ const PHONE_NUMBER = /(?:\+|00)?\d[\d\s()/.-]{6,}\d/;
 const PHONE_LABEL = /\b(tel(efon)?|phone|fon|t|büro|office|zentrale)\b\.?:?/i;
 const MOBILE_LABEL = /\b(mobil(e)?|handy|cell|m)\b\.?:?/i;
 const FAX_LABEL = /\b(tele)?fax\b/i;
+// Mobile networks that can be told from the number itself (CH, DE, AT), for numbers without a label.
+// Only with the country code: a national "07…" is a mobile number in Switzerland but a landline in Germany.
+const MOBILE_NUMBER = /^(?:\+|00)(?:417[5-9]|491[5-7]|436[5-9])/;
 const POSTAL = new RegExp(`(?:^|\\s)(?:(?:D|DE|CH|A|AT)[- ])?(\\d{4,5})\\s+([${LETTER}][${LETTER} .\\-/]*)`);
 const STREET_SUFFIX =
   "stra(?:ß|ss)e|str\\.?|weg|gasse|platz|allee|ring|damm|ufer|chaussee|hof|markt|steig|pfad|graben|promenade";
@@ -196,24 +201,32 @@ export function parseCard(text: string): CardFields {
     }
   });
 
-  // Phone: a landline label wins over a mobile label, which wins over an unlabelled number.
-  const phones: { rank: number; number: string }[] = [];
+  // Numbers with a mobile label, or from a mobile network, go to the mobile field. Of the
+  // others, one with a landline label wins over one without a label. Fax numbers are ignored.
+  const phones: { kind: "landline" | "mobile" | "unlabelled"; number: string }[] = [];
   segments.forEach((segment, index) => {
     if (used.has(index)) {
       return;
     }
-    const number = segment.match(PHONE_NUMBER);
-    if (!number) {
+    const match = segment.match(PHONE_NUMBER);
+    if (!match) {
       return;
     }
     used.add(index);
     if (FAX_LABEL.test(segment)) {
       return;
     }
-    const rank = PHONE_LABEL.test(segment) ? 0 : MOBILE_LABEL.test(segment) ? 1 : 2;
-    phones.push({ rank, number: clean(number[0]) });
+    const number = clean(match[0]);
+    const kind = PHONE_LABEL.test(segment)
+      ? "landline"
+      : MOBILE_LABEL.test(segment) || MOBILE_NUMBER.test(number.replace(/[^\d+]/g, ""))
+        ? "mobile"
+        : "unlabelled";
+    phones.push({ kind, number });
   });
-  fields.phone = phones.sort((a, b) => a.rank - b.rank)[0]?.number ?? "";
+  const firstOf = (kind: string) => phones.find((phone) => phone.kind === kind)?.number;
+  fields.phone = firstOf("landline") ?? firstOf("unlabelled") ?? "";
+  fields.mobile = firstOf("mobile") ?? "";
 
   let postalIndex = -1;
   segments.forEach((segment, index) => {

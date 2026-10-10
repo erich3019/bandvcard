@@ -153,7 +153,7 @@ The spec uses German names; the terms in parentheses are the spec's originals.
 - `ID`: UUID, generated automatically
 - Salutation (Anrede), first name (Vorname), last name (Nachname), street (Straße), house number (Straßennummer, text), city (Ort), company name (Firmenname), function (Funktion): all text
 - Postal code (Postleitzahl): foreign key to the postal code directory
-- Phone and email: not in the spec's Kontakt table, added in code because the capture flow extracts them
+- Phone, mobile and email: not in the spec's Kontakt table, added in code because the capture flow extracts them. The parser puts numbers with a mobile label or a CH/DE/AT mobile prefix into mobile, the landline into phone, and ignores fax numbers
 - Photo link (Foto-Link): URL/path of the card image in MinIO
 - Audit fields `CreatedAt`, `CreatedBy`, `UpdatedAt`, `UpdatedBy`: set automatically by the backend on save, never by the client
 

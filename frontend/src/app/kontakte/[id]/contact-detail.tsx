@@ -13,7 +13,7 @@ const dateTime = new Intl.DateTimeFormat("de-DE", {
   timeZone: "Europe/Berlin",
 });
 
-const links: Partial<Record<string, string>> = { email: "mailto:", phone: "tel:" };
+const links: Partial<Record<string, string>> = { email: "mailto:", phone: "tel:", mobile: "tel:" };
 
 export function ContactDetail({ contact }: { contact: Contact }) {
   const router = useRouter();

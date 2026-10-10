@@ -81,7 +81,7 @@ async function ContactList({ searchParams }: { searchParams: SearchParams }) {
                   {[contact.function, contact.companyName, contact.city].filter(Boolean).join(" · ")}
                 </span>
                 <span className="block text-sm text-zinc-600 dark:text-zinc-400">
-                  {[contact.email, contact.phone].filter(Boolean).join(" · ")}
+                  {[contact.email, contact.phone, contact.mobile].filter(Boolean).join(" · ")}
                 </span>
               </Link>
             </li>
