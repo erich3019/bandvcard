@@ -1,0 +1,197 @@
+using System.Net;
+using System.Net.Http.Json;
+using System.Security.Claims;
+using System.Text.Encodings.Web;
+using System.Text.Json;
+using Bandvcard.Api.Auth;
+using Bandvcard.Api.Data;
+using Microsoft.AspNetCore.Authentication;
+using Microsoft.AspNetCore.Hosting;
+using Microsoft.AspNetCore.Mvc.Testing;
+using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore.Infrastructure;
+using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.DependencyInjection.Extensions;
+using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Options;
+
+namespace Bandvcard.Api.Tests;
+
+public class ApiFactory : WebApplicationFactory<Program>
+{
+    private readonly string _databaseName = Guid.NewGuid().ToString();
+
+    // False keeps the real cookie authentication instead of the header-based test scheme.
+    protected virtual bool UseTestAuth => true;
+
+    protected override void ConfigureWebHost(IWebHostBuilder builder)
+    {
+        // Keep the tests independent of a developer's .env file.
+        builder.UseSetting(AuthSetup.DevLoginEmailKey, "");
+        // Keep the tests independent of Entra values in a developer's .env file.
+        builder.UseSetting("Entra:TenantId", "");
+        builder.UseSetting("Entra:ClientId", "");
+        builder.UseSetting("Entra:ClientSecret", "");
+        builder.ConfigureServices(services =>
+        {
+            // Swap PostgreSQL for the in-memory provider.
+            services.RemoveAll<DbContextOptions<BandvcardDbContext>>();
+            services.RemoveAll<IDbContextOptionsConfiguration<BandvcardDbContext>>();
+            services.AddDbContext<BandvcardDbContext>(options =>
+                options.UseInMemoryDatabase(_databaseName));
+
+            if (!UseTestAuth)
+            {
+                return;
+            }
+
+            // Replace the Microsoft login with a header-based test scheme.
+            services.AddAuthentication()
+                .AddScheme<AuthenticationSchemeOptions, TestAuthHandler>(TestAuthHandler.SchemeName, null);
+            services.PostConfigure<AuthenticationOptions>(options =>
+            {
+                options.DefaultScheme = TestAuthHandler.SchemeName;
+                options.DefaultChallengeScheme = TestAuthHandler.SchemeName;
+            });
+        });
+    }
+}
+
+// Authenticates a request as the user named in the X-Test-User header.
+public class TestAuthHandler(
+    IOptionsMonitor<AuthenticationSchemeOptions> options,
+    ILoggerFactory logger,
+    UrlEncoder encoder) : AuthenticationHandler<AuthenticationSchemeOptions>(options, logger, encoder)
+{
+    public const string SchemeName = "Test";
+    public const string Header = "X-Test-User";
+
+    protected override Task<AuthenticateResult> HandleAuthenticateAsync()
+    {
+        if (!Request.Headers.TryGetValue(Header, out var user))
+        {
+            return Task.FromResult(AuthenticateResult.NoResult());
+        }
+
+        var identity = new ClaimsIdentity(
+            [new Claim(ClaimTypes.Name, user.ToString()), new Claim(ClaimTypes.GivenName, "Test")],
+            SchemeName);
+        return Task.FromResult(AuthenticateResult.Success(
+            new AuthenticationTicket(new ClaimsPrincipal(identity), SchemeName)));
+    }
+}
+
+public class ODataApiTests : IClassFixture<ApiFactory>
+{
+    private readonly HttpClient _client;
+
+    public const string TestUser = "tester@example.com";
+
+    public ODataApiTests(ApiFactory factory)
+    {
+        _client = factory.CreateClient();
+        _client.DefaultRequestHeaders.Add(TestAuthHandler.Header, TestUser);
+    }
+
+    private static async Task<JsonElement> ReadJsonAsync(HttpResponseMessage response) =>
+        JsonDocument.Parse(await response.Content.ReadAsStringAsync()).RootElement;
+
+    [Fact]
+    public async Task Metadata_ListsAllEntitySets()
+    {
+        var metadata = await _client.GetStringAsync("/api/$metadata");
+
+        Assert.Contains("EntitySet Name=\"Contacts\"", metadata);
+        Assert.Contains("EntitySet Name=\"Users\"", metadata);
+        Assert.Contains("EntitySet Name=\"PostalCodes\"", metadata);
+    }
+
+    [Fact]
+    public async Task Contact_CanBeCreatedReadPatchedAndDeleted()
+    {
+        var clientId = Guid.NewGuid();
+        var create = await _client.PostAsJsonAsync("/api/Contacts", new
+        {
+            id = clientId,
+            firstName = "Erika",
+            lastName = "Muster",
+            createdBy = "spoofed",
+        });
+        Assert.Equal(HttpStatusCode.Created, create.StatusCode);
+        var created = await ReadJsonAsync(create);
+        var id = created.GetProperty("id").GetGuid();
+        Assert.NotEqual(clientId, id);
+        Assert.Equal(TestUser, created.GetProperty("createdBy").GetString());
+
+        var patch = await _client.PatchAsJsonAsync($"/api/Contacts({id})", new { lastName = "Beispiel" });
+        Assert.Equal(HttpStatusCode.NoContent, patch.StatusCode);
+
+        var read = await ReadJsonAsync(await _client.GetAsync($"/api/Contacts({id})"));
+        Assert.Equal("Erika", read.GetProperty("firstName").GetString());
+        Assert.Equal("Beispiel", read.GetProperty("lastName").GetString());
+
+        var delete = await _client.DeleteAsync($"/api/Contacts({id})");
+        Assert.Equal(HttpStatusCode.NoContent, delete.StatusCode);
+        Assert.Equal(HttpStatusCode.NotFound, (await _client.GetAsync($"/api/Contacts({id})")).StatusCode);
+    }
+
+    [Fact]
+    public async Task Contacts_SupportFilterAndCount()
+    {
+        await _client.PostAsJsonAsync("/api/Contacts", new { lastName = "Filter-A", companyName = "Acme" });
+        await _client.PostAsJsonAsync("/api/Contacts", new { lastName = "Filter-B", companyName = "Other" });
+
+        var result = await ReadJsonAsync(await _client.GetAsync(
+            "/api/Contacts?$filter=companyName eq 'Acme' and startswith(lastName,'Filter')&$count=true"));
+
+        Assert.Equal(1, result.GetProperty("@odata.count").GetInt32());
+        Assert.Equal("Filter-A", result.GetProperty("value")[0].GetProperty("lastName").GetString());
+    }
+
+    [Fact]
+    public async Task Contact_WithUnknownPostalCode_IsRejected()
+    {
+        var response = await _client.PostAsJsonAsync("/api/Contacts", new { lastName = "X", postalCode = "00000" });
+
+        Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
+    }
+
+    [Fact]
+    public async Task PostalCode_InUse_CannotBeDeleted_AndExpandsOnContact()
+    {
+        var entry = await _client.PostAsJsonAsync("/api/PostalCodes", new { postalCode = "8000", placeName = "Zürich" });
+        Assert.Equal(HttpStatusCode.Created, entry.StatusCode);
+        var create = await _client.PostAsJsonAsync("/api/Contacts", new { lastName = "Zh", postalCode = "8000" });
+        var id = (await ReadJsonAsync(create)).GetProperty("id").GetGuid();
+
+        var expanded = await ReadJsonAsync(await _client.GetAsync($"/api/Contacts({id})?$expand=postalCodeEntry"));
+        Assert.Equal("Zürich", expanded.GetProperty("postalCodeEntry").GetProperty("placeName").GetString());
+
+        var delete = await _client.DeleteAsync("/api/PostalCodes('8000')");
+        Assert.Equal(HttpStatusCode.Conflict, delete.StatusCode);
+    }
+
+    [Fact]
+    public async Task User_EmailIsUniqueKeyAndCannotBeChanged()
+    {
+        var user = new { email = "erika@example.com", firstName = "Erika", lastName = "Muster", status = "Active" };
+        Assert.Equal(HttpStatusCode.Created, (await _client.PostAsJsonAsync("/api/Users", user)).StatusCode);
+        Assert.Equal(HttpStatusCode.Conflict, (await _client.PostAsJsonAsync("/api/Users", user)).StatusCode);
+
+        var deactivate = await _client.PatchAsJsonAsync("/api/Users('erika@example.com')", new { status = "Inactive" });
+        Assert.Equal(HttpStatusCode.NoContent, deactivate.StatusCode);
+        var read = await ReadJsonAsync(await _client.GetAsync("/api/Users('erika@example.com')"));
+        Assert.Equal("Inactive", read.GetProperty("status").GetString());
+
+        var rename = await _client.PatchAsJsonAsync("/api/Users('erika@example.com')", new { email = "other@example.com" });
+        Assert.Equal(HttpStatusCode.BadRequest, rename.StatusCode);
+    }
+
+    [Fact]
+    public async Task User_WithoutRequiredFields_IsRejected()
+    {
+        var response = await _client.PostAsJsonAsync("/api/Users", new { email = "incomplete@example.com" });
+
+        Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
+    }
+}

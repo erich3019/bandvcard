@@ -41,13 +41,16 @@ Backend structure (`Bandvcard.Api`):
 - `Data/BandvcardDbContext.cs`: EF Core context for PostgreSQL. It fills the audit fields of every `IAuditable` entity in `SaveChanges`/`SaveChangesAsync` and blocks changes to `CreatedAt`/`CreatedBy` on update. New audited entities only need to implement `IAuditable`.
 - `Data/ICurrentUser.cs`: supplies the name for `CreatedBy`/`UpdatedBy`. It reads the HTTP user and falls back to `"system"`, because authentication does not exist yet.
 - Migrations live in `Migrations/` and are not applied automatically at startup.
-- The connection string is `ConnectionStrings:Default`: `appsettings.Development.json` points at the compose postgres on localhost:5433 with the `.env.example` credentials; in compose it comes from the environment.
-- Controllers use `AddOData()`, but no EDM model, routes or controllers exist yet.
-- Tests use the EF Core in-memory provider, so they do not need a database.
+- Passwords and secrets live only in the root `.env` (git-ignored; template `.env.example`), never in `appsettings*.json`. `Data/DotEnv.cs` loads that file for local `dotnet run`/`dotnet ef` and builds `ConnectionStrings:Default` from `POSTGRES_*` (host `localhost`, port `POSTGRES_PORT`) and the `Entra:*` settings from `ENTRA_*`. Real environment variables and explicit configuration win, which is how compose passes its own connection string.
+- `Data/EdmModel.cs` defines the OData entity sets `Contacts`, `Users` and `PostalCodes`, served under `/api` (e.g. `/api/Contacts(<guid>)`, `/api/Users('a@b.c')`, `/api/$metadata`). JSON property names are lower camel case. A new entity needs an entry there plus a controller whose name matches the entity set.
+- `Controllers/`: one `ODataController` per entity set with `Get`, `Get(key)`, `Post`, `Patch` (via `Delta<T>`) and `Delete`; no `Put`. Query options `$filter`, `$select`, `$orderby`, `$expand`, `$count` are enabled, `$top` is capped at 100 and collections page at 100. Keys cannot be changed, a contact's postal code must exist in `PostalCodes`, and a postal code in use cannot be deleted.
+- Every endpoint requires a logged-in user (authorization fallback policy) except `/api/auth/login` and `/api/auth/logout`; there are no roles, so any logged-in user can do everything, including managing users.
+- Tests use the EF Core in-memory provider, so they do not need a database. `ODataApiTests` runs the real HTTP pipeline through `WebApplicationFactory`; the in-memory provider does not enforce foreign keys, so those rules are checked in the controllers.
 
 Full stack (run in the repo root; needs `.env`, copy from `.env.example`):
 
 ```bash
+./scripts/generate-passwords.sh   # once: random POSTGRES_PASSWORD / MINIO_ROOT_PASSWORD in .env (--force replaces existing ones)
 docker compose up -d --build   # postgres, minio, backend, frontend, nginx
 docker compose logs -f backend
 docker compose down            # add -v to also delete the postgres and minio volumes
@@ -62,6 +65,21 @@ docker compose down            # add -v to also delete the postgres and minio vo
 ## What bandvcard is
 
 A digital business card manager: the user photographs a business card, OCR runs in the frontend, and the extracted data is stored as a structured contact, with the original photo kept in object storage.
+
+## Authentication
+
+Login is handled by the backend, not the frontend: OpenID Connect (authorization code + PKCE) against Microsoft Entra ID, then an HTTP-only session cookie `bandvcard.auth`. This works because nginx serves frontend and API on one origin. No tokens reach the browser.
+
+- Flow: frontend `/login` page links to `GET /api/auth/login?returnUrl=/` -> Microsoft -> `/api/auth/callback` -> cookie -> redirect to `returnUrl`. `GET /api/auth/me` returns the current user, `POST /api/auth/logout` ends the app session only (not the Microsoft session).
+- `backend/Bandvcard.Api/Auth/AuthSetup.cs` holds the whole configuration. On a successful Microsoft login `UserSignInService` creates the `User` on first login (email lower-cased, names from the Microsoft claims); a user with status inactive is rejected at login and on every later request.
+- The email in the cookie is `User.Identity.Name` and is what `ICurrentUser` writes to `CreatedBy`/`UpdatedBy`.
+- Configuration: `Entra:TenantId`, `Entra:ClientId`, `Entra:ClientSecret` (in compose: `ENTRA_*` in `.env`). If any is missing, the app still starts, every protected endpoint returns 401 and `/api/auth/login` returns 503. Single tenant only: the email claim is not a safe identity across tenants.
+- Test switch `DEV_LOGIN_EMAIL` in `.env` (`Auth:DevLoginEmail`): when set, `/api/auth/login` signs in as that user without Microsoft, through the same user creation, cookie and inactive check. It takes precedence over Entra. The backend refuses to start with it outside `ASPNETCORE_ENVIRONMENT=Development`. The compose backend defaults to Development for this reason; set `ASPNETCORE_ENVIRONMENT=Production` in `.env` for real use.
+- The Entra app registration needs the redirect URI `<origin>/api/auth/callback` (type Web), e.g. `http://localhost:8080/api/auth/callback`. The backend derives the origin from `X-Forwarded-Host`/`X-Forwarded-Proto`, which nginx sets.
+- Frontend: `src/proxy.ts` (Next.js 16 name for middleware) redirects requests without the cookie to `/login`; that check is optimistic. `src/lib/auth.ts` `getCurrentUser()` is the real check: it forwards the cookie to `/api/auth/me` using `BACKEND_URL` and redirects to `/login` on 401. Because `cacheComponents` is on, call it only inside a `<Suspense>` boundary. The cookie name is duplicated in `proxy.ts` and `AuthSetup.cs`.
+- With `npm run dev` (no nginx), `next.config.ts` rewrites `/api/*` to `BACKEND_URL` (default `http://localhost:5048`).
+- Backend tests replace the login with `TestAuthHandler`: send the header `X-Test-User: <email>` to act as that user.
+- In compose the cookie encryption keys persist in the `backend-keys` volume (`DataProtection:KeysPath`); without it, sessions end on every backend restart.
 
 ## Planned stack
 
@@ -104,6 +122,6 @@ The spec uses German names; the terms in parentheses are the spec's originals.
 These are explicitly undecided in the spec; ask rather than assume:
 
 - OCR library or service for the frontend (candidates named: Tesseract.js, Google Vision API, Azure Cognitive Services)
-- Authorisation concept (roles, access rights) is not specified
+- Authorisation concept (roles, access rights) is not specified; login exists, roles do not
 - Import source for postal code data (e.g. Deutsche Post, OpenPLZ)
 - MinIO bucket structure and access rights

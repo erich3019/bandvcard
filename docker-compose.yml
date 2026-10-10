@@ -42,6 +42,17 @@ services:
     restart: unless-stopped
     environment:
       ConnectionStrings__Default: Host=postgres;Port=5432;Database=${POSTGRES_DB};Username=${POSTGRES_USER};Password=${POSTGRES_PASSWORD}
+      # Development is required for DEV_LOGIN_EMAIL; set ASPNETCORE_ENVIRONMENT=Production in .env for real use.
+      ASPNETCORE_ENVIRONMENT: ${ASPNETCORE_ENVIRONMENT:-Development}
+      # Test switch: sign in as this user without Microsoft. Leave empty to use Entra.
+      Auth__DevLoginEmail: ${DEV_LOGIN_EMAIL:-}
+      # Without the test switch, login stays disabled (503) until all three Entra values are set.
+      Entra__TenantId: ${ENTRA_TENANT_ID:-}
+      Entra__ClientId: ${ENTRA_CLIENT_ID:-}
+      Entra__ClientSecret: ${ENTRA_CLIENT_SECRET:-}
+      DataProtection__KeysPath: /keys
+    volumes:
+      - backend-keys:/keys
     depends_on:
       postgres:
         condition: service_healthy
@@ -51,6 +62,8 @@ services:
   frontend:
     build: ./frontend
     restart: unless-stopped
+    environment:
+      BACKEND_URL: http://backend:8080
 
   nginx:
     image: nginx:1.29-alpine
@@ -65,4 +78,5 @@ services:
 
 volumes:
   postgres-data:
+  backend-keys:
   minio-data:

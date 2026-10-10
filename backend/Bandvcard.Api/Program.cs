@@ -1,32 +1,59 @@
+using Bandvcard.Api.Auth;
 using Bandvcard.Api.Data;
+using Microsoft.AspNetCore.HttpOverrides;
 using Microsoft.AspNetCore.OData;
 using Microsoft.EntityFrameworkCore;
 
 var builder = WebApplication.CreateBuilder(args);
 
+DotEnv.Load(builder.Environment.ContentRootPath);
+DotEnv.ApplyTo(builder.Configuration);
+
 // Add services to the container.
 
-builder.Services.AddControllers().AddOData();
+builder.Services.AddControllers().AddOData(options => options
+    .EnableQueryFeatures(maxTopValue: 100)
+    .AddRouteComponents("api", EdmModel.Build()));
 builder.Services.AddHttpContextAccessor();
 builder.Services.AddSingleton(TimeProvider.System);
 builder.Services.AddScoped<ICurrentUser, HttpContextCurrentUser>();
 builder.Services.AddDbContext<BandvcardDbContext>(options =>
     options.UseNpgsql(builder.Configuration.GetConnectionString("Default")));
+builder.AddBandvcardAuth();
+builder.Services.Configure<ForwardedHeadersOptions>(options =>
+{
+    options.ForwardedHeaders =
+        ForwardedHeaders.XForwardedFor | ForwardedHeaders.XForwardedProto | ForwardedHeaders.XForwardedHost;
+    // The backend is only reachable through the reverse proxy, whose address is not fixed.
+    options.KnownIPNetworks.Clear();
+    options.KnownProxies.Clear();
+});
 // Learn more about configuring OpenAPI at https://aka.ms/aspnet/openapi
 builder.Services.AddOpenApi();
 
 var app = builder.Build();
 
+if (AuthSetup.GetDevLoginEmail(app.Configuration) is { } devLoginEmail)
+{
+    app.Logger.LogWarning(
+        "Microsoft login is bypassed: everyone who opens the login is signed in as {Email}", devLoginEmail);
+}
+
 // Configure the HTTP request pipeline.
 if (app.Environment.IsDevelopment())
 {
-    app.MapOpenApi();
+    app.MapOpenApi().AllowAnonymous();
 }
 
+app.UseForwardedHeaders();
 app.UseHttpsRedirection();
 
+app.UseAuthentication();
 app.UseAuthorization();
 
 app.MapControllers();
 
 app.Run();
+
+// Exposed for WebApplicationFactory in the test project.
+public partial class Program;

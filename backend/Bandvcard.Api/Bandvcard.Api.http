@@ -1,6 +1,10 @@
 @Bandvcard.Api_HostAddress = http://localhost:5048
 
-GET {{Bandvcard.Api_HostAddress}}/openapi/v1.json
+GET {{Bandvcard.Api_HostAddress}}/api/$metadata
+
+###
+
+GET {{Bandvcard.Api_HostAddress}}/api/Contacts?$top=10&$count=true
 Accept: application/json
 
 ###
