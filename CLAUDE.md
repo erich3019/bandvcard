@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Repository state
 
-`frontend/` and `backend/` are fresh scaffolds with no domain code yet. `bandvcard_v1.0.0_context.docx` (German) is the project context/spec for v1.0.0; the stack, flow and domain model sections below are derived from it. PostgreSQL, MinIO and nginx are not set up.
+`frontend/` and `backend/` are fresh scaffolds with no domain code yet. `bandvcard_v1.0.0_context.docx` (German) is the project context/spec for v1.0.0; the stack, flow and domain model sections below are derived from it. The whole stack runs via Docker Compose.
 
 To re-read the spec: `pandoc -t markdown bandvcard_v1.0.0_context.docx` (falls back to `unzip -p bandvcard_v1.0.0_context.docx word/document.xml` if pandoc is missing).
 
@@ -30,6 +30,20 @@ dotnet test --filter "FullyQualifiedName~TestName"  # single test
 ```
 
 `Bandvcard.Api` uses controllers with `AddOData()` enabled but no EDM model or routes registered yet. `Microsoft.AspNetCore.OData` and `Npgsql.EntityFrameworkCore.PostgreSQL` are referenced; no `DbContext` or connection string exists.
+
+Full stack (run in the repo root; needs `.env`, copy from `.env.example`):
+
+```bash
+docker compose up -d --build   # postgres, minio, backend, frontend, nginx
+docker compose logs -f backend
+docker compose down            # add -v to also delete the postgres and minio volumes
+```
+
+- nginx is the only entry point for the apps: http://localhost:8080. `/api/` goes to the backend with the prefix kept (backend routes must be registered under `/api`), everything else goes to the frontend. TLS termination is not configured yet.
+- Host ports are bound to 127.0.0.1 and set in `.env`: postgres 5433 (not 5432), MinIO API 9000, MinIO console 9001.
+- The backend container gets `ConnectionStrings__Default` pointing at the `postgres` service. Nothing reads it yet, and no MinIO settings are passed to any service.
+- MinIO uses `cgr.dev/chainguard/minio:latest` because official `minio/minio` images are no longer published. Only `latest` is free there, so the version is not pinned.
+- The frontend image relies on `output: "standalone"` in `frontend/next.config.ts`.
 
 ## What bandvcard is
 
