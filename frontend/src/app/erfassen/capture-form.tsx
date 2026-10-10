@@ -1,27 +1,15 @@
 "use client";
 
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useRef, useState } from "react";
+import { ContactFields } from "@/components/contact-fields";
 import { createContact, SessionExpiredError, uploadPhoto } from "@/lib/api";
 import { prepareImage } from "@/lib/image";
 import { recognizeText } from "@/lib/ocr";
 import { type CardFields, emptyCardFields, parseCard } from "@/lib/parse-card";
 
 type Step = "start" | "reading" | "review" | "saving" | "saved";
-
-const inputs: { name: keyof CardFields; label: string; type?: string; wide?: boolean; autoComplete?: string }[] = [
-  { name: "salutation", label: "Anrede" },
-  { name: "function", label: "Funktion" },
-  { name: "firstName", label: "Vorname" },
-  { name: "lastName", label: "Nachname" },
-  { name: "companyName", label: "Firmenname", wide: true },
-  { name: "street", label: "Straße" },
-  { name: "houseNumber", label: "Straßennummer" },
-  { name: "postalCode", label: "Postleitzahl" },
-  { name: "city", label: "Ort" },
-  { name: "phone", label: "Telefon", type: "tel" },
-  { name: "email", label: "E-Mail", type: "email" },
-];
 
 function message(error: unknown): string {
   return error instanceof Error ? error.message : String(error);
@@ -36,6 +24,7 @@ export function CaptureForm() {
   const [ocrText, setOcrText] = useState("");
   const [fields, setFields] = useState<CardFields>(emptyCardFields);
   const [error, setError] = useState<string | null>(null);
+  const [savedId, setSavedId] = useState<string | null>(null);
   // Kept across a failed save, so a retry does not upload the photo twice.
   const photoLink = useRef<string | null>(null);
 
@@ -44,6 +33,7 @@ export function CaptureForm() {
       URL.revokeObjectURL(previewUrl);
     }
     photoLink.current = null;
+    setSavedId(null);
     setPhoto(null);
     setPreviewUrl(null);
     setOcrText("");
@@ -87,7 +77,7 @@ export function CaptureForm() {
     setStep("saving");
     try {
       photoLink.current ??= await uploadPhoto(photo);
-      await createContact(fields, photoLink.current);
+      setSavedId(await createContact(fields, photoLink.current));
       setStep("saved");
     } catch (saveError) {
       if (saveError instanceof SessionExpiredError) {
@@ -144,6 +134,11 @@ export function CaptureForm() {
         <button type="button" onClick={reset} className="h-12 rounded-full bg-foreground px-6 font-medium text-background">
           Weitere Visitenkarte erfassen
         </button>
+        {savedId && (
+          <Link href={`/kontakte/${savedId}`} className="underline">
+            Kontakt ansehen
+          </Link>
+        )}
       </div>
     );
   }
@@ -165,20 +160,7 @@ export function CaptureForm() {
         </div>
       ) : (
         <form onSubmit={handleSave} className="flex flex-col gap-6">
-          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-            {inputs.map(({ name, label, type, wide }) => (
-              <label key={name} className={`flex flex-col gap-1 text-sm ${wide ? "sm:col-span-2" : ""}`}>
-                {label}
-                <input
-                  type={type ?? "text"}
-                  value={fields[name]}
-                  disabled={busy}
-                  onChange={(event) => setFields({ ...fields, [name]: event.target.value })}
-                  className="rounded-lg border border-black/15 bg-white px-3 py-2 text-base dark:border-white/20 dark:bg-zinc-900"
-                />
-              </label>
-            ))}
-          </div>
+          <ContactFields fields={fields} disabled={busy} onChange={setFields} />
 
           {ocrText && (
             <details className="text-sm text-zinc-600 dark:text-zinc-400">

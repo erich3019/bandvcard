@@ -1,6 +1,5 @@
 import "server-only";
-import { cookies } from "next/headers";
-import { redirect } from "next/navigation";
+import { backendFetch } from "./backend";
 
 export type CurrentUser = {
   email: string;
@@ -8,19 +7,9 @@ export type CurrentUser = {
   lastName: string | null;
 };
 
-const backendUrl = process.env.BACKEND_URL ?? "http://localhost:5048";
-
 // The backend owns the session; this asks it who the cookie belongs to.
 export async function getCurrentUser(): Promise<CurrentUser> {
-  const cookieHeader = (await cookies()).toString();
-  const response = await fetch(`${backendUrl}/api/auth/me`, {
-    headers: { cookie: cookieHeader },
-    cache: "no-store",
-  });
-
-  if (response.status === 401) {
-    redirect("/login");
-  }
+  const response = await backendFetch("/api/auth/me");
   if (!response.ok) {
     throw new Error(`Backend returned ${response.status} for /api/auth/me`);
   }

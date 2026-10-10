@@ -33,14 +33,27 @@ export async function uploadPhoto(photo: Blob): Promise<string> {
   return (await response.json()).photoLink;
 }
 
-export async function createContact(fields: CardFields, photoLink: string): Promise<void> {
-  // Empty inputs are sent as null, so "not on the card" stays distinguishable from text.
-  const contact = Object.fromEntries(
-    Object.entries({ ...fields, photoLink }).map(([key, value]) => [key, value.trim() || null]),
-  );
-  await send("/api/Contacts", {
+// Empty inputs are sent as null, so "not on the card" stays distinguishable from text.
+function toPayload(values: Record<string, string>): string {
+  return JSON.stringify(Object.fromEntries(Object.entries(values).map(([key, value]) => [key, value.trim() || null])));
+}
+
+const json = { "Content-Type": "application/json" };
+
+// Returns the ID of the new contact.
+export async function createContact(fields: CardFields, photoLink: string): Promise<string> {
+  const response = await send("/api/Contacts", {
     method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(contact),
+    headers: json,
+    body: toPayload({ ...fields, photoLink }),
   });
+  return (await response.json()).id;
+}
+
+export async function updateContact(id: string, fields: CardFields): Promise<void> {
+  await send(`/api/Contacts(${id})`, { method: "PATCH", headers: json, body: toPayload(fields) });
+}
+
+export async function deleteContact(id: string): Promise<void> {
+  await send(`/api/Contacts(${id})`, { method: "DELETE" });
 }

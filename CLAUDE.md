@@ -99,6 +99,13 @@ Backend side:
 - Saving a contact with a postal code that is not in `PostalCodes` adds it with the contact's city as place name (400 if there is no city). The directory therefore grows from captured cards; there is no import.
 - Deleting a contact does not delete its photo, and a failed contact save after a successful upload leaves an orphaned photo.
 
+## Contact list and detail pages
+
+- `/kontakte` (list) and `/kontakte/[id]` (detail) are server-rendered: they call the backend through `lib/backend.ts` `backendFetch()`, which forwards the session cookie and redirects to `/login` on 401. Like `getCurrentUser()` it must run inside a `<Suspense>` boundary, and so must reading `params`/`searchParams`.
+- The list state lives in the URL (`?q=` search text, `?seite=` page), the search is a plain GET form. `lib/contacts.ts` builds the OData query (`contactListQuery`, 25 per page, case-insensitive search over name, company, city and email) and holds the `Contact` types; it is shared by server and client code, so keep it free of server-only imports.
+- Editing and deleting happen in the client component `kontakte/[id]/contact-detail.tsx` through `lib/api.ts` (browser `fetch` to `/api`), followed by `router.refresh()`.
+- `components/contact-fields.tsx` is the one definition of the contact form fields and their German labels, used by capture, edit and the detail view; add a new contact field there (and in `CardFields`). `components/page-shell.tsx` is the common navigation and layout for pages behind the login.
+
 ## Planned stack
 
 | Layer | Technology |
