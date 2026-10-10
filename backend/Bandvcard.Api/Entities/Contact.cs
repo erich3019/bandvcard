@@ -5,8 +5,11 @@ public enum AbacusStatus
 {
     None,
 
-    // "übernehmen": released, waiting to be imported by Abacus.
+    // "übernehmen": released by a person, waiting to be imported by Abacus.
     ToImport,
+
+    // "übernommen": transferred to Abacus. Only the import sets this (AbacusController).
+    Imported,
 }
 
 public class Contact : IAuditable
@@ -29,6 +32,9 @@ public class Contact : IAuditable
     public string? PhotoLink { get; set; }
 
     public AbacusStatus AbacusStatus { get; set; } = AbacusStatus.None;
+
+    // When the import transferred the contact; set together with AbacusStatus.Imported.
+    public DateTimeOffset? AbacusImportedAt { get; set; }
 
     public ICollection<Opportunity> Opportunities { get; } = [];
 

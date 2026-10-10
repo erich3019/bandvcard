@@ -111,6 +111,39 @@ public class ApiKeyTests
         Assert.Equal(HttpStatusCode.OK, (await client.GetAsync(contact)).StatusCode);
     }
 
+    [Fact]
+    public async Task TheKey_ReportsAnImport_AndThenNoLongerGetsThatContact()
+    {
+        await using var factory = new ProductionWithApiKeyFactory();
+        var (released, notReleased) = await SeedAsync(factory);
+        var client = CreateClient(factory);
+
+        var report = await client.PostAsync($"/api/abacus/contacts/{released}/imported", null);
+        Assert.Equal(HttpStatusCode.OK, report.StatusCode);
+        Assert.Equal("Imported", (await JsonAsync(report)).GetProperty("abacusStatus").GetString());
+        Assert.Equal(HttpStatusCode.NotFound, (await client.PostAsync($"/api/abacus/contacts/{notReleased}/imported", null)).StatusCode);
+
+        var remaining = await JsonAsync(await client.GetAsync("/api/Contacts"));
+        Assert.Equal(["Auch-Frei"], remaining.GetProperty("value").EnumerateArray().Select(c => c.GetProperty("lastName").GetString()));
+
+        using var scope = factory.Services.CreateScope();
+        var stored = await scope.ServiceProvider.GetRequiredService<BandvcardDbContext>().Contacts.FindAsync(released);
+        Assert.Equal(AbacusStatus.Imported, stored!.AbacusStatus);
+        Assert.NotNull(stored.AbacusImportedAt);
+        Assert.Equal(ApiKeyAuthHandler.IdentityName, stored.UpdatedBy);
+    }
+
+    [Fact]
+    public async Task ReportingAnImport_NeedsTheKey()
+    {
+        await using var factory = new ProductionWithApiKeyFactory();
+        var (released, _) = await SeedAsync(factory);
+
+        var response = await CreateClient(factory, "wrong-key").PostAsync($"/api/abacus/contacts/{released}/imported", null);
+
+        Assert.Equal(HttpStatusCode.Unauthorized, response.StatusCode);
+    }
+
     [Theory]
     [InlineData("wrong-key")]
     [InlineData("")]

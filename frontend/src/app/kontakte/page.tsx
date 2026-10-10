@@ -3,7 +3,13 @@ import Link from "next/link";
 import { Suspense } from "react";
 import { PageShell } from "@/components/page-shell";
 import { backendFetch } from "@/lib/backend";
-import { CONTACTS_PAGE_SIZE, type ContactSummary, contactListQuery, displayName } from "@/lib/contacts";
+import {
+  abacusStatusLabels,
+  CONTACTS_PAGE_SIZE,
+  type ContactSummary,
+  contactListQuery,
+  displayName,
+} from "@/lib/contacts";
 
 export const metadata: Metadata = { title: "Kontakte – bandvcard" };
 
@@ -77,9 +83,15 @@ async function ContactList({ searchParams }: { searchParams: SearchParams }) {
             <li key={contact.id}>
               <Link href={`/kontakte/${contact.id}`} className="block px-4 py-3 hover:bg-black/5 dark:hover:bg-white/10">
                 <span className="font-medium">{displayName(contact)}</span>
-                {contact.abacusStatus === "ToImport" && (
-                  <span className="ml-2 rounded-full bg-emerald-100 px-2 py-0.5 text-xs text-emerald-900 dark:bg-emerald-900 dark:text-emerald-100">
-                    Abacus: übernehmen
+                {contact.abacusStatus !== "None" && (
+                  <span
+                    className={`ml-2 rounded-full px-2 py-0.5 text-xs ${
+                      contact.abacusStatus === "ToImport"
+                        ? "bg-amber-100 text-amber-900 dark:bg-amber-900 dark:text-amber-100"
+                        : "bg-emerald-100 text-emerald-900 dark:bg-emerald-900 dark:text-emerald-100"
+                    }`}
+                  >
+                    Abacus: {abacusStatusLabels[contact.abacusStatus]}
                   </span>
                 )}
                 <span className="block text-sm text-zinc-600 dark:text-zinc-400">

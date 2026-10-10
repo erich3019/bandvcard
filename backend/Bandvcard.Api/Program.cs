@@ -55,12 +55,14 @@ app.UseHttpsRedirection();
 
 app.UseAuthentication();
 
-// The integration (API key) is read-only, whatever endpoints exist now or are added later.
+// The integration (API key) is read-only, whatever endpoints exist now or are added later,
+// except for actions explicitly marked with [IntegrationWrite].
 app.Use(async (context, next) =>
 {
     if (context.User.IsInRole(Roles.Integration)
         && !HttpMethods.IsGet(context.Request.Method)
-        && !HttpMethods.IsHead(context.Request.Method))
+        && !HttpMethods.IsHead(context.Request.Method)
+        && context.GetEndpoint()?.Metadata.GetMetadata<IntegrationWriteAttribute>() is null)
     {
         context.Response.StatusCode = StatusCodes.Status403Forbidden;
         return;

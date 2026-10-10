@@ -141,6 +141,68 @@ public class OpportunityTests(ApiFactory factory) : IClassFixture<ApiFactory>
         Assert.Equal(nameof(AbacusStatus.None), await StatusAsync());
     }
 
+    private static string Imported(Guid contactId) => $"/api/abacus/contacts/{contactId}/imported";
+
+    [Fact]
+    public async Task TheImport_MarksAReleasedContactAsImportedWithTheDate()
+    {
+        var client = Client();
+        var import = Client("abacus-import", Roles.Integration);
+        var contactId = await CreateContactAsync(client, "Wird-Importiert");
+        var url = $"/api/Contacts({contactId})";
+
+        // Not released yet: nothing to report.
+        Assert.Equal(HttpStatusCode.NotFound, (await import.PostAsync(Imported(contactId), null)).StatusCode);
+
+        await client.PatchAsJsonAsync(url, new { abacusStatus = "ToImport" });
+        var before = DateTimeOffset.UtcNow;
+        var first = await import.PostAsync(Imported(contactId), null);
+        Assert.Equal(HttpStatusCode.OK, first.StatusCode);
+
+        var contact = await JsonAsync(await client.GetAsync(url));
+        Assert.Equal("Imported", contact.GetProperty("abacusStatus").GetString());
+        var importedAt = contact.GetProperty("abacusImportedAt").GetDateTimeOffset();
+        Assert.InRange(importedAt, before.AddSeconds(-1), DateTimeOffset.UtcNow.AddSeconds(1));
+
+        // Repeating the call keeps the first date, and the import no longer gets the contact.
+        var second = await JsonAsync(await import.PostAsync(Imported(contactId), null));
+        Assert.Equal(importedAt, second.GetProperty("abacusImportedAt").GetDateTimeOffset());
+        Assert.Equal(HttpStatusCode.NotFound, (await import.GetAsync(url)).StatusCode);
+    }
+
+    [Fact]
+    public async Task People_CannotSetImportedOrItsDate_ButCanReleaseAgain()
+    {
+        var client = Client();
+        var import = Client("abacus-import", Roles.Integration);
+        var contactId = await CreateContactAsync(client, "Nur-Import");
+        var url = $"/api/Contacts({contactId})";
+        async Task<JsonElement> ContactAsync() => await JsonAsync(await client.GetAsync(url));
+
+        Assert.Equal(HttpStatusCode.BadRequest, (await client.PatchAsJsonAsync(url, new { abacusStatus = "Imported" })).StatusCode);
+        Assert.Equal(HttpStatusCode.BadRequest, (await client.PostAsJsonAsync("/api/Contacts", new { lastName = "X", abacusStatus = "Imported" })).StatusCode);
+        Assert.Equal(HttpStatusCode.Forbidden, (await client.PostAsync(Imported(contactId), null)).StatusCode);
+        Assert.Equal(HttpStatusCode.Forbidden, (await Client("opp-admin@example.com", Roles.Admin).PostAsync(Imported(contactId), null)).StatusCode);
+
+        // A date sent by a person is ignored.
+        await client.PatchAsJsonAsync(url, new { abacusStatus = "ToImport", abacusImportedAt = "2020-01-01T00:00:00Z" });
+        Assert.Equal(JsonValueKind.Null, (await ContactAsync()).GetProperty("abacusImportedAt").ValueKind);
+
+        await import.PostAsync(Imported(contactId), null);
+        // Editing an imported contact keeps status and date ...
+        await client.PatchAsJsonAsync(url, new { lastName = "Geändert", abacusImportedAt = "2020-01-01T00:00:00Z" });
+        var edited = await ContactAsync();
+        Assert.Equal("Imported", edited.GetProperty("abacusStatus").GetString());
+        Assert.True(edited.GetProperty("abacusImportedAt").GetDateTimeOffset().Year > 2020);
+
+        // ... and releasing it again starts over.
+        await client.PatchAsJsonAsync(url, new { abacusStatus = "ToImport" });
+        var again = await ContactAsync();
+        Assert.Equal("ToImport", again.GetProperty("abacusStatus").GetString());
+        Assert.Equal(JsonValueKind.Null, again.GetProperty("abacusImportedAt").ValueKind);
+        Assert.Equal(HttpStatusCode.OK, (await import.GetAsync(url)).StatusCode);
+    }
+
     [Fact]
     public async Task AForeignContact_CannotBeReleasedForAbacus()
     {

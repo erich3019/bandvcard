@@ -9,14 +9,22 @@ export type Opportunity = {
 
 export const OPPORTUNITY_MAX_LENGTH = 200;
 
-// "ToImport" is the status "übernehmen": released for the import into the ERP system Abacus.
-export type AbacusStatus = "None" | "ToImport";
+// The release for the import into the ERP system Abacus. People set "ToImport" ("übernehmen")
+// and take it back; the import sets "Imported" ("übernommen") together with the date.
+export type AbacusStatus = "None" | "ToImport" | "Imported";
+
+export const abacusStatusLabels: Record<AbacusStatus, string> = {
+  None: "nicht freigegeben",
+  ToImport: "übernehmen",
+  Imported: "übernommen",
+};
 
 // A contact as the OData API returns it: fields that are not set are null.
 export type Contact = { [Field in keyof CardFields]: string | null } & {
   id: string;
   photoLink: string | null;
   abacusStatus: AbacusStatus;
+  abacusImportedAt: string | null;
   // Only present when requested with $expand.
   opportunities?: Opportunity[];
   createdAt: string;

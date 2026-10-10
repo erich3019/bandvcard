@@ -28,6 +28,9 @@ namespace Bandvcard.Api.Migrations
                         .ValueGeneratedOnAdd()
                         .HasColumnType("uuid");
 
+                    b.Property<DateTimeOffset?>("AbacusImportedAt")
+                        .HasColumnType("timestamp with time zone");
+
                     b.Property<string>("AbacusStatus")
                         .IsRequired()
                         .HasMaxLength(16)

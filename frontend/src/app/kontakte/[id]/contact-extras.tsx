@@ -3,10 +3,15 @@
 import { useRouter } from "next/navigation";
 import { useState } from "react";
 import { createOpportunity, deleteOpportunity, SessionExpiredError, setAbacusStatus } from "@/lib/api";
-import { type Contact, OPPORTUNITY_MAX_LENGTH } from "@/lib/contacts";
+import { abacusStatusLabels, type Contact, OPPORTUNITY_MAX_LENGTH } from "@/lib/contacts";
 
 // Fixed time zone, so server and browser render the same text.
 const date = new Intl.DateTimeFormat("de-DE", { dateStyle: "medium", timeZone: "Europe/Berlin" });
+const dateTime = new Intl.DateTimeFormat("de-DE", {
+  dateStyle: "medium",
+  timeStyle: "short",
+  timeZone: "Europe/Berlin",
+});
 
 // What belongs to a contact beyond the card data: its opportunities and the release for Abacus.
 export function ContactExtras({ contact }: { contact: Contact }) {
@@ -15,7 +20,7 @@ export function ContactExtras({ contact }: { contact: Contact }) {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const opportunities = contact.opportunities ?? [];
-  const released = contact.abacusStatus === "ToImport";
+  const status = contact.abacusStatus;
 
   async function run(action: () => Promise<void>, failure: string) {
     setError(null);
@@ -113,11 +118,20 @@ export function ContactExtras({ contact }: { contact: Contact }) {
         <h2 className="text-xl font-semibold">ERP-Import (Abacus)</h2>
         <p>
           Status:{" "}
-          {released ? (
-            <strong>übernehmen</strong>
+          {status === "None" ? (
+            <span className="text-zinc-600 dark:text-zinc-400">{abacusStatusLabels.None}</span>
           ) : (
-            <span className="text-zinc-600 dark:text-zinc-400">nicht freigegeben</span>
+            <strong>{abacusStatusLabels[status]}</strong>
           )}
+          {status === "Imported" && contact.abacusImportedAt && (
+            <> am {dateTime.format(new Date(contact.abacusImportedAt))}</>
+          )}
+        </p>
+        <p className="text-sm text-zinc-600 dark:text-zinc-400">
+          {status === "None" && "Nur freigegebene Kontakte werden nach Abacus übernommen."}
+          {status === "ToImport" && "Der Kontakt wird beim nächsten Lauf des Imports nach Abacus übernommen."}
+          {status === "Imported" &&
+            "Der Import hat den Kontakt nach Abacus übernommen. Eine erneute Freigabe überträgt ihn noch einmal."}
         </p>
         <div>
           <button
@@ -125,17 +139,19 @@ export function ContactExtras({ contact }: { contact: Contact }) {
             disabled={busy}
             onClick={() =>
               void run(
-                () => setAbacusStatus(contact.id, released ? "None" : "ToImport"),
+                () => setAbacusStatus(contact.id, status === "ToImport" ? "None" : "ToImport"),
                 "Status konnte nicht geändert werden",
               )
             }
             className={
-              released
-                ? "h-12 rounded-full border border-black/10 px-6 disabled:opacity-50 dark:border-white/20"
-                : "h-12 rounded-full bg-foreground px-6 font-medium text-background disabled:opacity-50"
+              status === "None"
+                ? "h-12 rounded-full bg-foreground px-6 font-medium text-background disabled:opacity-50"
+                : "h-12 rounded-full border border-black/10 px-6 disabled:opacity-50 dark:border-white/20"
             }
           >
-            {released ? "Freigabe zurücknehmen" : "Für Abacus freigeben"}
+            {status === "None" && "Für Abacus freigeben"}
+            {status === "ToImport" && "Freigabe zurücknehmen"}
+            {status === "Imported" && "Erneut freigeben"}
           </button>
         </div>
       </section>

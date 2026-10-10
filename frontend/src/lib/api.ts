@@ -1,4 +1,3 @@
-import type { AbacusStatus } from "./contacts";
 import type { CardFields } from "./parse-card";
 
 // The session can end while the page is open; callers send the user to the login page.
@@ -55,7 +54,8 @@ export async function updateContact(id: string, fields: CardFields): Promise<voi
   await send(`/api/Contacts(${id})`, { method: "PATCH", headers: json, body: toPayload(fields) });
 }
 
-export async function setAbacusStatus(id: string, abacusStatus: AbacusStatus): Promise<void> {
+// Only "None" and "ToImport": the backend refuses "Imported", which the import sets.
+export async function setAbacusStatus(id: string, abacusStatus: "None" | "ToImport"): Promise<void> {
   await send(`/api/Contacts(${id})`, { method: "PATCH", headers: json, body: JSON.stringify({ abacusStatus }) });
 }
 
