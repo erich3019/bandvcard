@@ -11,8 +11,8 @@ namespace Bandvcard.Api.Controllers;
 [Route("api/photos")]
 public class PhotosController(
     IPhotoStorage storage,
-    BandvcardDbContext db,
     ICurrentUser currentUser,
+    ContactVisibility visibility,
     TimeProvider timeProvider) : ControllerBase
 {
     public const long MaxSize = 15 * 1024 * 1024;
@@ -55,11 +55,11 @@ public class PhotosController(
             return NotFound();
         }
 
-        // A photo is as visible as the contacts it belongs to: users get it only through
-        // one of their own contacts, admins always.
+        // A photo is as visible as the contacts it belongs to; admins also see photos that
+        // no contact uses any more.
         var link = PhotoLinks.ToLink(key);
         if (!currentUser.IsAdmin
-            && !await db.Contacts.AnyAsync(c => c.PhotoLink == link && c.CreatedBy == currentUser.Name, cancellationToken))
+            && !await visibility.Contacts.AnyAsync(c => c.PhotoLink == link, cancellationToken))
         {
             return NotFound();
         }

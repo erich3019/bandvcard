@@ -14,12 +14,12 @@ public class ContactsController(
     BandvcardDbContext db,
     IPhotoStorage photos,
     ICurrentUser currentUser,
+    ContactVisibility visibility,
     ILogger<ContactsController> logger) : ODataController
 {
-    // Users work only with the contacts they captured themselves; admins with all of them.
-    // Everything in this controller goes through this, so a foreign contact looks like a missing one.
-    private IQueryable<Contact> Visible =>
-        currentUser.IsAdmin ? db.Contacts : db.Contacts.Where(c => c.CreatedBy == currentUser.Name);
+    // Everything in this controller goes through this, so a contact the caller may not see
+    // looks like a missing one.
+    private IQueryable<Contact> Visible => visibility.Contacts;
 
     [EnableQuery(PageSize = 100)]
     public IQueryable<Contact> Get() => Visible;

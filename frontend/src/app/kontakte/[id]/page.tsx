@@ -6,6 +6,7 @@ import { PageShell } from "@/components/page-shell";
 import { backendFetch } from "@/lib/backend";
 import { type Contact, isContactId } from "@/lib/contacts";
 import { ContactDetail } from "./contact-detail";
+import { ContactExtras } from "./contact-extras";
 
 export const metadata: Metadata = { title: "Kontakt – bandvcard" };
 
@@ -16,7 +17,7 @@ async function LoadedContact({ params }: { params: Promise<{ id: string }> }) {
     notFound();
   }
 
-  const response = await backendFetch(`/api/Contacts(${id})`);
+  const response = await backendFetch(`/api/Contacts(${id})?$expand=opportunities($orderby=createdAt desc)`);
   if (response.status === 404) {
     notFound();
   }
@@ -25,7 +26,12 @@ async function LoadedContact({ params }: { params: Promise<{ id: string }> }) {
   }
   const contact: Contact = await response.json();
 
-  return <ContactDetail contact={contact} />;
+  return (
+    <>
+      <ContactDetail contact={contact} />
+      <ContactExtras contact={contact} />
+    </>
+  );
 }
 
 export default function ContactPage({ params }: { params: Promise<{ id: string }> }) {

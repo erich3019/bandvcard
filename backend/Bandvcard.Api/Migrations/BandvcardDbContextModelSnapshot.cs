@@ -28,6 +28,11 @@ namespace Bandvcard.Api.Migrations
                         .ValueGeneratedOnAdd()
                         .HasColumnType("uuid");
 
+                    b.Property<string>("AbacusStatus")
+                        .IsRequired()
+                        .HasMaxLength(16)
+                        .HasColumnType("character varying(16)");
+
                     b.Property<string>("City")
                         .HasColumnType("text");
 
@@ -86,6 +91,41 @@ namespace Bandvcard.Api.Migrations
                     b.HasIndex("PostalCode");
 
                     b.ToTable("Contacts");
+                });
+
+            modelBuilder.Entity("Bandvcard.Api.Entities.Opportunity", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid>("ContactId")
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTimeOffset>("CreatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("CreatedBy")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<string>("Text")
+                        .IsRequired()
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)");
+
+                    b.Property<DateTimeOffset>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("UpdatedBy")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("ContactId");
+
+                    b.ToTable("Opportunities");
                 });
 
             modelBuilder.Entity("Bandvcard.Api.Entities.PostalCodeEntry", b =>
@@ -149,6 +189,22 @@ namespace Bandvcard.Api.Migrations
                         .OnDelete(DeleteBehavior.Restrict);
 
                     b.Navigation("PostalCodeEntry");
+                });
+
+            modelBuilder.Entity("Bandvcard.Api.Entities.Opportunity", b =>
+                {
+                    b.HasOne("Bandvcard.Api.Entities.Contact", "Contact")
+                        .WithMany("Opportunities")
+                        .HasForeignKey("ContactId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("Contact");
+                });
+
+            modelBuilder.Entity("Bandvcard.Api.Entities.Contact", b =>
+                {
+                    b.Navigation("Opportunities");
                 });
 
             modelBuilder.Entity("Bandvcard.Api.Entities.PostalCodeEntry", b =>

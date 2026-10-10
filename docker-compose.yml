@@ -47,6 +47,8 @@ services:
       Auth__DevUserEmail: ${DEV_USER_EMAIL:-}
       # Comma-separated addresses that are made admin at every login.
       Auth__AdminEmails: ${ADMIN_EMAILS:-}
+      # Read-only access to released contacts for the Abacus import (n8n), sent as X-Api-Key.
+      Integration__ApiKey: ${ABACUS_API_KEY:-}
       # Only used outside Development; login stays disabled (503) until all three are set.
       Entra__TenantId: ${ENTRA_TENANT_ID:-}
       Entra__ClientId: ${ENTRA_CLIENT_ID:-}

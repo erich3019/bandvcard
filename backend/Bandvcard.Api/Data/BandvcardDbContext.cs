@@ -11,6 +11,7 @@ public class BandvcardDbContext(
     public DbSet<User> Users => Set<User>();
     public DbSet<Contact> Contacts => Set<Contact>();
     public DbSet<PostalCodeEntry> PostalCodes => Set<PostalCodeEntry>();
+    public DbSet<Opportunity> Opportunities => Set<Opportunity>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -31,10 +32,22 @@ public class BandvcardDbContext(
         modelBuilder.Entity<Contact>(contact =>
         {
             contact.Property(c => c.Id).ValueGeneratedOnAdd();
+            contact.Property(c => c.AbacusStatus).HasConversion<string>().HasMaxLength(16);
             contact.HasOne(c => c.PostalCodeEntry)
                 .WithMany(e => e.Contacts)
                 .HasForeignKey(c => c.PostalCode)
                 .OnDelete(DeleteBehavior.Restrict);
+        });
+
+        modelBuilder.Entity<Opportunity>(opportunity =>
+        {
+            opportunity.Property(o => o.Id).ValueGeneratedOnAdd();
+            opportunity.Property(o => o.Text).HasMaxLength(Opportunity.MaxTextLength);
+            // Opportunities belong to their contact and go with it.
+            opportunity.HasOne(o => o.Contact)
+                .WithMany(c => c.Opportunities)
+                .HasForeignKey(o => o.ContactId)
+                .OnDelete(DeleteBehavior.Cascade);
         });
     }
 

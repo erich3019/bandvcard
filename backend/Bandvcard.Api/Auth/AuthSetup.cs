@@ -13,6 +13,7 @@ public static class AuthSetup
 {
     public const string CookieName = "bandvcard.auth";
     public const string LoginPage = "/login";
+    private const string SelectorScheme = "Bandvcard";
 
     // Keep the session cookie small: only what the app needs.
     public static ClaimsPrincipal CreatePrincipal(User user, string? authenticationType) =>
@@ -37,11 +38,24 @@ public static class AuthSetup
         services.AddAuthorizationBuilder()
             .SetFallbackPolicy(new AuthorizationPolicyBuilder().RequireAuthenticatedUser().Build());
 
-        if (builder.Environment.IsDevelopment())
+        var development = builder.Environment.IsDevelopment();
+        var interactiveScheme = development ? DevAuthHandler.SchemeName : CookieAuthenticationDefaults.AuthenticationScheme;
+        var authentication = services
+            .AddAuthentication(options =>
+            {
+                options.DefaultScheme = SelectorScheme;
+                options.DefaultSignInScheme = interactiveScheme;
+            })
+            // A request with an API key is the integration and nothing else; a wrong key must
+            // not fall back to the login of the browser or, in Development, to the developer user.
+            .AddPolicyScheme(SelectorScheme, null, options => options.ForwardDefaultSelector = context =>
+                context.Request.Headers.ContainsKey(ApiKeyAuthHandler.Header) ? ApiKeyAuthHandler.SchemeName : interactiveScheme)
+            .AddScheme<AuthenticationSchemeOptions, ApiKeyAuthHandler>(ApiKeyAuthHandler.SchemeName, null);
+
+        if (development)
         {
             // No login while developing: every request is the developer user.
-            services.AddAuthentication(DevAuthHandler.SchemeName)
-                .AddScheme<AuthenticationSchemeOptions, DevAuthHandler>(DevAuthHandler.SchemeName, null);
+            authentication.AddScheme<AuthenticationSchemeOptions, DevAuthHandler>(DevAuthHandler.SchemeName, null);
             return;
         }
 
@@ -54,8 +68,7 @@ public static class AuthSetup
                 .PersistKeysToFileSystem(new DirectoryInfo(keysPath));
         }
 
-        var authentication = services
-            .AddAuthentication(CookieAuthenticationDefaults.AuthenticationScheme)
+        authentication
             .AddCookie(options =>
             {
                 options.Cookie.Name = CookieName;

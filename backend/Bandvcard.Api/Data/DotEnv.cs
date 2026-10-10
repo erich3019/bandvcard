@@ -48,6 +48,7 @@ public static class DotEnv
         configuration["Entra:ClientSecret"] ??= Env("ENTRA_CLIENT_SECRET");
         configuration["Auth:DevUserEmail"] ??= Env("DEV_USER_EMAIL");
         configuration["Auth:AdminEmails"] ??= Env("ADMIN_EMAILS");
+        configuration["Integration:ApiKey"] ??= Env("ABACUS_API_KEY");
 
         if (Env("MINIO_ROOT_PASSWORD") is { } minioSecret)
         {

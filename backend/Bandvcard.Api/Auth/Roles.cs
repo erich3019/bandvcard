@@ -7,6 +7,9 @@ public static class Roles
 {
     public const string Admin = nameof(UserRole.Admin);
     public const string User = nameof(UserRole.User);
+
+    // Not a user role: the identity of the API key (see ApiKeyAuthHandler).
+    public const string Integration = "Integration";
 }
 
 // The addresses from Auth:AdminEmails (ADMIN_EMAILS). They are made admin at every login and

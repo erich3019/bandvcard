@@ -77,6 +77,11 @@ async function ContactList({ searchParams }: { searchParams: SearchParams }) {
             <li key={contact.id}>
               <Link href={`/kontakte/${contact.id}`} className="block px-4 py-3 hover:bg-black/5 dark:hover:bg-white/10">
                 <span className="font-medium">{displayName(contact)}</span>
+                {contact.abacusStatus === "ToImport" && (
+                  <span className="ml-2 rounded-full bg-emerald-100 px-2 py-0.5 text-xs text-emerald-900 dark:bg-emerald-900 dark:text-emerald-100">
+                    Abacus: übernehmen
+                  </span>
+                )}
                 <span className="block text-sm text-zinc-600 dark:text-zinc-400">
                   {[contact.function, contact.companyName, contact.city].filter(Boolean).join(" · ")}
                 </span>

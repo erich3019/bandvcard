@@ -13,6 +13,7 @@ public static class EdmModel
         builder.EnableLowerCamelCase();
 
         builder.EntitySet<Contact>("Contacts");
+        builder.EntitySet<Opportunity>("Opportunities");
         builder.EntitySet<User>("Users").EntityType.HasKey(u => u.Email);
         // No navigation from a postal code to its contacts: $expand would bypass the rule
         // that users only see their own contacts.

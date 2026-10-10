@@ -91,7 +91,7 @@ Common to both:
 
 Two roles, stored in `User.Role` (`UserRole`): `User` (default) and `Admin`. The rules are enforced in the backend; the frontend only hides what would be refused.
 
-- **Contacts:** a user works only with contacts they captured (`Contact.CreatedBy` = their email, set by the audit logic and not changeable); an admin with all. Every query in `ContactsController` goes through its `Visible` property, so a foreign contact answers 404, not 403. Any new way to reach contacts (endpoint, `$expand` path, export) must apply the same filter; the navigation from postal code to contacts is removed from the EDM for that reason.
+- **Contacts and their opportunities:** a user works only with contacts they captured (`Contact.CreatedBy` = their email, set by the audit logic and not changeable); an admin with all. `Data/ContactVisibility.cs` is the one place that decides this, and the contact, opportunity and photo controllers all query through it, so a foreign contact answers 404, not 403. Any new way to reach contacts (endpoint, `$expand` path, export) must go through it too; the navigation from postal code to contacts is removed from the EDM for that reason.
 - **Photos:** readable only through a contact the user may see (or by admins), and a contact cannot reference a photo that belongs to another user's contact.
 - **Users** (`UsersController`): admins only. Guards: nobody can change their own role or status or delete themselves, and an address in `ADMIN_EMAILS` cannot be demoted.
 - **Postal codes:** readable by everyone, changed directly only by admins. Saving a contact still adds unknown postal codes for any user.
@@ -122,6 +122,15 @@ Backend side:
 - The list state lives in the URL (`?q=` search text, `?seite=` page), the search is a plain GET form. `lib/contacts.ts` builds the OData query (`contactListQuery`, 25 per page, case-insensitive search over name, company, city and email) and holds the `Contact` types; it is shared by server and client code, so keep it free of server-only imports.
 - Editing and deleting happen in the client component `kontakte/[id]/contact-detail.tsx` through `lib/api.ts` (browser `fetch` to `/api`), followed by `router.refresh()`.
 - `components/contact-fields.tsx` is the one definition of the contact form fields and their German labels, used by capture, edit and the detail view; add a new contact field there (and in `CardFields`). `components/page-shell.tsx` is the common navigation and layout for pages behind the login.
+
+## Opportunities and the Abacus release
+
+Both are additions to the spec, requested later.
+
+- **Opportunities:** a contact has any number of `Opportunity` rows (`Text`, max. 200 characters, trimmed, not empty; audited). They are deleted with their contact (database cascade). OData entity set `Opportunities` with `OpportunitiesController`; an opportunity cannot be moved to another contact. They follow the visibility of their contact (see Roles and permissions).
+- **Abacus release:** `Contact.AbacusStatus` is `None` or `ToImport`; `ToImport` is the status the users call "übernehmen" and means released for the import into the ERP system Abacus. People set it and take it back by hand with a normal `PATCH` on the contact; nothing sets it automatically, because only hand-picked contacts are to be transferred. The transfer itself is an n8n workflow outside this repository. There is deliberately no "imported" status, so the workflow has to remember what it already transferred.
+- **Access for the import (n8n):** a request with the header `X-Api-Key: <ABACUS_API_KEY>` (`Integration:ApiKey`) is the integration, in every environment (`Auth/ApiKeyAuthHandler.cs`, role `Integration`, not a user and not stored in the user table). It is read-only, enforced centrally in `Program.cs` for every non-GET request, and `Data/ContactVisibility.cs` limits it to contacts with `ToImport`, their opportunities and their photos. Typical call: `GET /api/Contacts?$expand=opportunities`. A wrong key is a 401 and never falls back to the browser login or the developer user. An empty key disables the access; `scripts/generate-passwords.sh` creates one.
+- Frontend: both live on the contact detail page in `kontakte/[id]/contact-extras.tsx`; the list marks released contacts.
 
 ## Planned stack
 

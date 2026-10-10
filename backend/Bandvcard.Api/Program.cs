@@ -21,6 +21,7 @@ builder.Services.AddScoped<ICurrentUser, HttpContextCurrentUser>();
 builder.Services.AddDbContext<BandvcardDbContext>(options =>
     options.UseNpgsql(builder.Configuration.GetConnectionString("Default")));
 builder.AddBandvcardAuth();
+builder.Services.AddScoped<ContactVisibility>();
 builder.Services.AddSingleton<IPhotoStorage>(_ => new MinioPhotoStorage(
     builder.Configuration.GetSection("Minio").Get<MinioOptions>() ?? new MinioOptions()));
 builder.Services.Configure<ForwardedHeadersOptions>(options =>
@@ -53,6 +54,20 @@ app.UseForwardedHeaders();
 app.UseHttpsRedirection();
 
 app.UseAuthentication();
+
+// The integration (API key) is read-only, whatever endpoints exist now or are added later.
+app.Use(async (context, next) =>
+{
+    if (context.User.IsInRole(Roles.Integration)
+        && !HttpMethods.IsGet(context.Request.Method)
+        && !HttpMethods.IsHead(context.Request.Method))
+    {
+        context.Response.StatusCode = StatusCodes.Status403Forbidden;
+        return;
+    }
+
+    await next(context);
+});
 app.UseAuthorization();
 
 app.MapControllers();

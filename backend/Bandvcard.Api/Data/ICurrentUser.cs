@@ -8,6 +8,9 @@ public interface ICurrentUser
     string Name { get; }
 
     bool IsAdmin { get; }
+
+    // True for the machine access with the API key instead of a person.
+    bool IsIntegration => false;
 }
 
 public class HttpContextCurrentUser(IHttpContextAccessor httpContextAccessor) : ICurrentUser
@@ -18,4 +21,6 @@ public class HttpContextCurrentUser(IHttpContextAccessor httpContextAccessor) : 
     public string Name => httpContextAccessor.HttpContext?.User.Identity?.Name ?? Fallback;
 
     public bool IsAdmin => httpContextAccessor.HttpContext?.User.IsInRole(Roles.Admin) == true;
+
+    public bool IsIntegration => httpContextAccessor.HttpContext?.User.IsInRole(Roles.Integration) == true;
 }

@@ -1,3 +1,4 @@
+import type { AbacusStatus } from "./contacts";
 import type { CardFields } from "./parse-card";
 
 // The session can end while the page is open; callers send the user to the login page.
@@ -52,6 +53,18 @@ export async function createContact(fields: CardFields, photoLink: string): Prom
 
 export async function updateContact(id: string, fields: CardFields): Promise<void> {
   await send(`/api/Contacts(${id})`, { method: "PATCH", headers: json, body: toPayload(fields) });
+}
+
+export async function setAbacusStatus(id: string, abacusStatus: AbacusStatus): Promise<void> {
+  await send(`/api/Contacts(${id})`, { method: "PATCH", headers: json, body: JSON.stringify({ abacusStatus }) });
+}
+
+export async function createOpportunity(contactId: string, text: string): Promise<void> {
+  await send("/api/Opportunities", { method: "POST", headers: json, body: JSON.stringify({ contactId, text }) });
+}
+
+export async function deleteOpportunity(id: string): Promise<void> {
+  await send(`/api/Opportunities(${id})`, { method: "DELETE" });
 }
 
 export async function deleteContact(id: string): Promise<void> {

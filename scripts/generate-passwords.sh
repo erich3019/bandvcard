@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Generates random passwords for POSTGRES_PASSWORD and MINIO_ROOT_PASSWORD and writes them to .env.
+# Generates random values for POSTGRES_PASSWORD, MINIO_ROOT_PASSWORD and ABACUS_API_KEY and writes them to .env.
 #
 # Values that are already set to something other than a placeholder are kept;
 # pass --force to replace them as well.
@@ -41,10 +41,10 @@ set_value() {
 }
 
 postgres_changed=false
-for key in POSTGRES_PASSWORD MINIO_ROOT_PASSWORD; do
+for key in POSTGRES_PASSWORD MINIO_ROOT_PASSWORD ABACUS_API_KEY; do
     if $force || is_placeholder "$(current "$key")"; then
         set_value "$key" "$(generate)"
-        echo "$key: new password written to .env"
+        echo "$key: new value written to .env"
         [[ $key == POSTGRES_PASSWORD ]] && postgres_changed=true
     else
         echo "$key: already set, kept (use --force to replace)"

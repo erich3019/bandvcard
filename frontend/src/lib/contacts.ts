@@ -1,9 +1,24 @@
 import { type CardFields, emptyCardFields } from "./parse-card";
 
+export type Opportunity = {
+  id: string;
+  text: string;
+  createdAt: string;
+  createdBy: string;
+};
+
+export const OPPORTUNITY_MAX_LENGTH = 200;
+
+// "ToImport" is the status "übernehmen": released for the import into the ERP system Abacus.
+export type AbacusStatus = "None" | "ToImport";
+
 // A contact as the OData API returns it: fields that are not set are null.
 export type Contact = { [Field in keyof CardFields]: string | null } & {
   id: string;
   photoLink: string | null;
+  abacusStatus: AbacusStatus;
+  // Only present when requested with $expand.
+  opportunities?: Opportunity[];
   createdAt: string;
   createdBy: string;
   updatedAt: string;
@@ -12,7 +27,7 @@ export type Contact = { [Field in keyof CardFields]: string | null } & {
 
 export type ContactSummary = Pick<
   Contact,
-  "id" | "firstName" | "lastName" | "companyName" | "function" | "city" | "email" | "phone" | "mobile"
+  "id" | "firstName" | "lastName" | "companyName" | "function" | "city" | "email" | "phone" | "mobile" | "abacusStatus"
 >;
 
 export function toCardFields(contact: Contact): CardFields {
@@ -39,7 +54,7 @@ const SEARCH_FIELDS = ["lastName", "firstName", "companyName", "city", "email"];
 // that may appear in any of the search fields.
 export function contactListQuery(search: string, page: number): string {
   const params = [
-    "$select=id,firstName,lastName,companyName,function,city,email,phone,mobile",
+    "$select=id,firstName,lastName,companyName,function,city,email,phone,mobile,abacusStatus",
     "$orderby=lastName,firstName,companyName",
     `$top=${CONTACTS_PAGE_SIZE}`,
     `$skip=${(page - 1) * CONTACTS_PAGE_SIZE}`,

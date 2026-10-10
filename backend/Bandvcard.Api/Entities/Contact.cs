@@ -1,5 +1,14 @@
 namespace Bandvcard.Api.Entities;
 
+// Whether the contact is released for the import into the ERP system Abacus.
+public enum AbacusStatus
+{
+    None,
+
+    // "übernehmen": released, waiting to be imported by Abacus.
+    ToImport,
+}
+
 public class Contact : IAuditable
 {
     public Guid Id { get; set; }
@@ -18,6 +27,10 @@ public class Contact : IAuditable
     public string? Email { get; set; }
     // URL or path of the business card photo in MinIO.
     public string? PhotoLink { get; set; }
+
+    public AbacusStatus AbacusStatus { get; set; } = AbacusStatus.None;
+
+    public ICollection<Opportunity> Opportunities { get; } = [];
 
     public DateTimeOffset CreatedAt { get; set; }
     public string CreatedBy { get; set; } = "";
