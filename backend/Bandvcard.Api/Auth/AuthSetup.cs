@@ -1,4 +1,5 @@
 using System.Security.Claims;
+using System.Threading.RateLimiting;
 using Bandvcard.Api.Entities;
 using Microsoft.AspNetCore.Authentication;
 using Microsoft.AspNetCore.Authentication.Cookies;
@@ -13,11 +14,7 @@ public static class AuthSetup
 {
     public const string CookieName = "bandvcard.auth";
     public const string LoginPage = "/login";
-    public const string DevLoginEmailKey = "Auth:DevLoginEmail";
-
-    // Test switch: when set, the login endpoint signs in this user without asking Microsoft.
-    public static string? GetDevLoginEmail(IConfiguration configuration) =>
-        configuration[DevLoginEmailKey] is { Length: > 0 } email ? email : null;
+    public const string LoginRateLimit = "login";
 
     // Keep the session cookie small: only what the app needs.
     public static ClaimsPrincipal CreatePrincipal(User user, string? authenticationType) =>
@@ -38,12 +35,22 @@ public static class AuthSetup
         services.AddSingleton<AdminEmails>();
         services.AddScoped<UserSignInService>();
 
-        if (GetDevLoginEmail(builder.Configuration) is not null && !builder.Environment.IsDevelopment())
+        if (new TestLogins(builder.Configuration).Enabled && !builder.Environment.IsDevelopment())
         {
             throw new InvalidOperationException(
-                $"{DevLoginEmailKey} (DEV_LOGIN_EMAIL) bypasses the Microsoft login and is only allowed " +
-                "in the Development environment. Remove it or set ASPNETCORE_ENVIRONMENT=Development.");
+                $"{TestLogins.Key} (TEST_LOGINS) replaces the Microsoft login with test passwords and is only " +
+                "allowed in the Development environment. Remove it or set ASPNETCORE_ENVIRONMENT=Development.");
         }
+
+        services.AddSingleton<TestLogins>();
+        // Slows down password guessing: a few attempts per minute and client address.
+        services.AddRateLimiter(options =>
+        {
+            options.RejectionStatusCode = StatusCodes.Status429TooManyRequests;
+            options.AddPolicy(LoginRateLimit, context => RateLimitPartition.GetFixedWindowLimiter(
+                context.Connection.RemoteIpAddress?.ToString() ?? "unknown",
+                _ => new FixedWindowRateLimiterOptions { PermitLimit = 10, Window = TimeSpan.FromMinutes(1) }));
+        });
 
         var keysPath = builder.Configuration["DataProtection:KeysPath"];
         if (!string.IsNullOrEmpty(keysPath))

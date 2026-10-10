@@ -36,10 +36,11 @@ builder.Services.AddOpenApi();
 
 var app = builder.Build();
 
-if (AuthSetup.GetDevLoginEmail(app.Configuration) is { } devLoginEmail)
+if (app.Services.GetRequiredService<TestLogins>() is { Enabled: true } testLogins)
 {
     app.Logger.LogWarning(
-        "Microsoft login is bypassed: everyone who opens the login is signed in as {Email}", devLoginEmail);
+        "Test login with email and password is active instead of Microsoft, for: {Emails}",
+        string.Join(", ", testLogins.Emails));
 }
 
 // Configure the HTTP request pipeline.
@@ -52,6 +53,7 @@ app.UseForwardedHeaders();
 app.UseHttpsRedirection();
 
 app.UseAuthentication();
+app.UseRateLimiter();
 app.UseAuthorization();
 
 app.MapControllers();
