@@ -1,6 +1,7 @@
 using Bandvcard.Api.Auth;
 using Bandvcard.Api.Data;
 using Bandvcard.Api.Entities;
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.OData.Deltas;
 using Microsoft.AspNetCore.OData.Query;
@@ -10,7 +11,11 @@ using Microsoft.EntityFrameworkCore;
 
 namespace Bandvcard.Api.Controllers;
 
-public class UsersController(BandvcardDbContext db) : ODataController
+[Authorize(Roles = Roles.Admin)]
+public class UsersController(
+    BandvcardDbContext db,
+    ICurrentUser currentUser,
+    AdminEmails adminEmails) : ODataController
 {
     [EnableQuery(PageSize = 100)]
     public IQueryable<User> Get() => db.Users;
@@ -51,10 +56,22 @@ public class UsersController(BandvcardDbContext db) : ODataController
             return NotFound();
         }
 
+        var (oldRole, oldStatus) = (user.Role, user.Status);
         delta.Patch(user);
         if (user.Email != key)
         {
             return BadRequest("The email address is the user's key and cannot be changed.");
+        }
+
+        // An admin who demotes or deactivates themselves could leave the app without any admin.
+        if (key == currentUser.Name && (user.Role != oldRole || user.Status != oldStatus))
+        {
+            return Conflict("You cannot change your own role or status.");
+        }
+
+        if (user.Role != UserRole.Admin && adminEmails.Contains(key))
+        {
+            return Conflict("This user is configured as admin (ADMIN_EMAILS) and cannot be demoted here.");
         }
 
         await db.SaveChangesAsync();
@@ -67,6 +84,11 @@ public class UsersController(BandvcardDbContext db) : ODataController
         if (user is null)
         {
             return NotFound();
+        }
+
+        if (key == currentUser.Name)
+        {
+            return Conflict("You cannot delete your own user.");
         }
 
         db.Users.Remove(user);

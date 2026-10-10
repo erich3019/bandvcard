@@ -9,6 +9,8 @@ public class AuditFieldsTests
     private sealed class FakeCurrentUser : ICurrentUser
     {
         public string Name { get; set; } = "alice@example.com";
+
+        public bool IsAdmin => false;
     }
 
     private sealed class FakeTimeProvider : TimeProvider

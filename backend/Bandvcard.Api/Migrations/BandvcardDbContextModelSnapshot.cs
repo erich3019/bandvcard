@@ -123,6 +123,11 @@ namespace Bandvcard.Api.Migrations
                     b.Property<string>("Phone")
                         .HasColumnType("text");
 
+                    b.Property<string>("Role")
+                        .IsRequired()
+                        .HasMaxLength(16)
+                        .HasColumnType("character varying(16)");
+
                     b.Property<string>("Status")
                         .IsRequired()
                         .HasMaxLength(16)

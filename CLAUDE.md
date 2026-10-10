@@ -46,7 +46,7 @@ Backend structure (`Bandvcard.Api`):
 - Passwords and secrets live only in the root `.env` (git-ignored; template `.env.example`), never in `appsettings*.json`. `Data/DotEnv.cs` loads that file for local `dotnet run`/`dotnet ef` and builds `ConnectionStrings:Default` from `POSTGRES_*` (host `localhost`, port `POSTGRES_PORT`) and the `Entra:*` settings from `ENTRA_*`. Real environment variables and explicit configuration win, which is how compose passes its own connection string.
 - `Data/EdmModel.cs` defines the OData entity sets `Contacts`, `Users` and `PostalCodes`, served under `/api` (e.g. `/api/Contacts(<guid>)`, `/api/Users('a@b.c')`, `/api/$metadata`). JSON property names are lower camel case. A new entity needs an entry there plus a controller whose name matches the entity set.
 - `Controllers/`: one `ODataController` per entity set with `Get`, `Get(key)`, `Post`, `Patch` (via `Delta<T>`) and `Delete`; no `Put`. Query options `$filter`, `$select`, `$orderby`, `$expand`, `$count` are enabled, `$top` is capped at 100 and collections page at 100. Keys cannot be changed, an unknown postal code on a contact is added to `PostalCodes` (see Capturing a business card), and a postal code in use cannot be deleted.
-- Every endpoint requires a logged-in user (authorization fallback policy) except `/api/auth/login` and `/api/auth/logout`; there are no roles, so any logged-in user can do everything, including managing users.
+- Every endpoint requires a logged-in user (authorization fallback policy) except `/api/auth/login` and `/api/auth/logout`; what a user may do beyond that is described under Roles and permissions.
 - Tests use the EF Core in-memory provider, so they do not need a database. `ODataApiTests` runs the real HTTP pipeline through `WebApplicationFactory`; the in-memory provider does not enforce foreign keys, so those rules are checked in the controllers.
 
 Full stack (run in the repo root; needs `.env`, copy from `.env.example`):
@@ -84,6 +84,19 @@ Login is handled by the backend, not the frontend: OpenID Connect (authorization
 - With `npm run dev` (no nginx), `next.config.ts` rewrites `/api/*` to `BACKEND_URL` (default `http://localhost:5048`).
 - Backend tests replace the login with `TestAuthHandler`: send the header `X-Test-User: <email>` to act as that user.
 - In compose the cookie encryption keys persist in the `backend-keys` volume (`DataProtection:KeysPath`); without it, sessions end on every backend restart.
+
+## Roles and permissions
+
+Two roles, stored in `User.Role` (`UserRole`): `User` (default) and `Admin`. The rules are enforced in the backend; the frontend only hides what would be refused.
+
+- **Contacts:** a user works only with contacts they captured (`Contact.CreatedBy` = their email, set by the audit logic and not changeable); an admin with all. Every query in `ContactsController` goes through its `Visible` property, so a foreign contact answers 404, not 403. Any new way to reach contacts (endpoint, `$expand` path, export) must apply the same filter; the navigation from postal code to contacts is removed from the EDM for that reason.
+- **Photos:** readable only through a contact the user may see (or by admins), and a contact cannot reference a photo that belongs to another user's contact.
+- **Users** (`UsersController`): admins only. Guards: nobody can change their own role or status or delete themselves, and an address in `ADMIN_EMAILS` cannot be demoted.
+- **Postal codes:** readable by everyone, changed directly only by admins. Saving a contact still adds unknown postal codes for any user.
+- **Who is admin:** `ADMIN_EMAILS` in `.env` (`Auth:AdminEmails`, comma-separated). Those addresses get the role at every login. Removing an address there does not demote the user; do that under "Benutzer". Admins assign roles on the page `/benutzer` (`frontend/src/app/benutzer/`).
+- The role is a role claim in the session cookie, used via `[Authorize(Roles = Roles.Admin)]` and `ICurrentUser.IsAdmin`. The cookie is re-checked against the database on every request (`AuthSetup.ValidateSessionAsync`), so role changes, deactivation and deletion apply to running sessions immediately.
+- Deleting a user does not block them: with a valid Microsoft login they are created again as a normal user. Deactivate to block. Their contacts stay and are then visible to admins only (and to them again if they return).
+- Backend tests choose the role with the header `X-Test-Role: Admin` next to `X-Test-User`.
 
 ## Capturing a business card
 
@@ -148,6 +161,5 @@ The spec uses German names; the terms in parentheses are the spec's originals.
 
 These are explicitly undecided in the spec; ask rather than assume:
 
-- Authorisation concept (roles, access rights) is not specified; login exists, roles do not
 - Import source for postal code data (e.g. Deutsche Post, OpenPLZ)
 - MinIO access rights (a single bucket and the root credentials are used for now)

@@ -19,6 +19,7 @@ public class BandvcardDbContext(
             user.HasKey(u => u.Email);
             user.Property(u => u.Email).HasMaxLength(320);
             user.Property(u => u.Status).HasConversion<string>().HasMaxLength(16);
+            user.Property(u => u.Role).HasConversion<string>().HasMaxLength(16);
         });
 
         modelBuilder.Entity<PostalCodeEntry>(entry =>

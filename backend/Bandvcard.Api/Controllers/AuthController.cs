@@ -56,6 +56,7 @@ public class AuthController(
         email = User.Identity!.Name,
         firstName = User.FindFirstValue(ClaimTypes.GivenName),
         lastName = User.FindFirstValue(ClaimTypes.Surname),
+        role = User.FindFirstValue(ClaimTypes.Role),
     });
 
     // Ends the app session only; the Microsoft session stays signed in.

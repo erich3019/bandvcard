@@ -5,6 +5,7 @@ using Bandvcard.Api.Data;
 using Bandvcard.Api.Entities;
 using Microsoft.AspNetCore.Mvc.Testing;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 
 namespace Bandvcard.Api.Tests;
@@ -68,6 +69,8 @@ public class UserSignInServiceTests
     private sealed class NoUser : ICurrentUser
     {
         public string Name => "test";
+
+        public bool IsAdmin => false;
     }
 
     private readonly BandvcardDbContext _db = new(
@@ -75,10 +78,16 @@ public class UserSignInServiceTests
         new NoUser(),
         TimeProvider.System);
 
+    private UserSignInService CreateService(string adminEmails = "") => new(
+        _db,
+        new AdminEmails(new ConfigurationBuilder()
+            .AddInMemoryCollection(new Dictionary<string, string?> { [AdminEmails.Key] = adminEmails })
+            .Build()));
+
     [Fact]
     public async Task FirstLogin_CreatesActiveUserWithNormalisedEmail()
     {
-        var user = await new UserSignInService(_db).SignInAsync(" Erika.Muster@Example.com ", "Erika", "Muster");
+        var user = await CreateService().SignInAsync(" Erika.Muster@Example.com ", "Erika", "Muster");
 
         Assert.NotNull(user);
         var stored = await _db.Users.SingleAsync();
@@ -86,6 +95,22 @@ public class UserSignInServiceTests
         Assert.Equal("Erika", stored.FirstName);
         Assert.Equal("Muster", stored.LastName);
         Assert.Equal(UserStatus.Active, stored.Status);
+        Assert.Equal(UserRole.User, stored.Role);
+    }
+
+    [Fact]
+    public async Task ConfiguredAdmin_BecomesAdminOnFirstAndOnLaterLogins()
+    {
+        var service = CreateService(adminEmails: "Boss@Example.com, other@example.com");
+
+        var created = await service.SignInAsync("boss@example.com", "B", "Oss");
+        Assert.Equal(UserRole.Admin, created!.Role);
+
+        // Demoted behind the app's back: the next login restores the role.
+        created.Role = UserRole.User;
+        await _db.SaveChangesAsync();
+        await service.SignInAsync("boss@example.com", "B", "Oss");
+        Assert.Equal(UserRole.Admin, (await _db.Users.SingleAsync()).Role);
     }
 
     [Fact]
@@ -94,7 +119,7 @@ public class UserSignInServiceTests
         _db.Users.Add(new User { Email = "erika@example.com", FirstName = "Erika", LastName = "Muster", Phone = "123" });
         await _db.SaveChangesAsync();
 
-        var user = await new UserSignInService(_db).SignInAsync("ERIKA@example.com", "Other", "Name");
+        var user = await CreateService().SignInAsync("ERIKA@example.com", "Other", "Name");
 
         Assert.NotNull(user);
         var stored = await _db.Users.SingleAsync();
@@ -113,10 +138,10 @@ public class UserSignInServiceTests
             Status = UserStatus.Inactive,
         });
         await _db.SaveChangesAsync();
-        var service = new UserSignInService(_db);
+        var service = CreateService();
 
         Assert.Null(await service.SignInAsync("gone@example.com", "G", "One"));
-        Assert.False(await service.IsActiveAsync("gone@example.com"));
+        Assert.Null(await service.FindActiveAsync("gone@example.com"));
     }
 }
 
@@ -160,17 +185,25 @@ public class DevLoginTests
         Assert.Equal(HttpStatusCode.OK, me.StatusCode);
         Assert.Contains(DevLoginFactory.Email, await me.Content.ReadAsStringAsync());
 
-        using (var scope = factory.Services.CreateScope())
-        {
-            var db = scope.ServiceProvider.GetRequiredService<BandvcardDbContext>();
-            var user = await db.Users.SingleAsync(u => u.Email == DevLoginFactory.Email);
-            user.Status = UserStatus.Inactive;
-            await db.SaveChangesAsync();
-        }
+        // A role change applies to the running session, without a new login.
+        Assert.Equal(HttpStatusCode.Forbidden, (await client.GetAsync("/api/Users")).StatusCode);
+        await ChangeUserAsync(factory, user => user.Role = UserRole.Admin);
+        Assert.Equal(HttpStatusCode.OK, (await client.GetAsync("/api/Users")).StatusCode);
+        Assert.Contains("\"role\":\"Admin\"", await (await client.GetAsync("/api/auth/me")).Content.ReadAsStringAsync());
+
+        await ChangeUserAsync(factory, user => user.Status = UserStatus.Inactive);
 
         Assert.Equal(HttpStatusCode.Unauthorized, (await client.GetAsync("/api/auth/me")).StatusCode);
         var again = await client.GetAsync("/api/auth/login");
         Assert.Equal("/login?error=inactive", again.Headers.Location?.OriginalString);
+    }
+
+    private static async Task ChangeUserAsync(DevLoginFactory factory, Action<User> change)
+    {
+        using var scope = factory.Services.CreateScope();
+        var db = scope.ServiceProvider.GetRequiredService<BandvcardDbContext>();
+        change(await db.Users.SingleAsync(u => u.Email == DevLoginFactory.Email));
+        await db.SaveChangesAsync();
     }
 
     [Fact]

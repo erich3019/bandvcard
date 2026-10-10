@@ -47,6 +47,7 @@ public static class DotEnv
         configuration["Entra:ClientId"] ??= Env("ENTRA_CLIENT_ID");
         configuration["Entra:ClientSecret"] ??= Env("ENTRA_CLIENT_SECRET");
         configuration["Auth:DevLoginEmail"] ??= Env("DEV_LOGIN_EMAIL");
+        configuration["Auth:AdminEmails"] ??= Env("ADMIN_EMAILS");
 
         if (Env("MINIO_ROOT_PASSWORD") is { } minioSecret)
         {

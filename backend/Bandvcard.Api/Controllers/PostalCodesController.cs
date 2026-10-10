@@ -1,5 +1,7 @@
+using Bandvcard.Api.Auth;
 using Bandvcard.Api.Data;
 using Bandvcard.Api.Entities;
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.OData.Deltas;
 using Microsoft.AspNetCore.OData.Query;
@@ -9,6 +11,8 @@ using Microsoft.EntityFrameworkCore;
 
 namespace Bandvcard.Api.Controllers;
 
+// Everyone may read the directory; changing it directly is for admins.
+// (Saving a contact still adds unknown postal codes, see ContactsController.)
 public class PostalCodesController(BandvcardDbContext db) : ODataController
 {
     [EnableQuery(PageSize = 100)]
@@ -18,6 +22,7 @@ public class PostalCodesController(BandvcardDbContext db) : ODataController
     public SingleResult<PostalCodeEntry> Get(string key) =>
         SingleResult.Create(db.PostalCodes.Where(e => e.PostalCode == key));
 
+    [Authorize(Roles = Roles.Admin)]
     public async Task<IActionResult> Post([FromBody] PostalCodeEntry entry)
     {
         if (!ModelState.IsValid)
@@ -35,6 +40,7 @@ public class PostalCodesController(BandvcardDbContext db) : ODataController
         return Created(entry);
     }
 
+    [Authorize(Roles = Roles.Admin)]
     public async Task<IActionResult> Patch(string key, [FromBody] Delta<PostalCodeEntry> delta)
     {
         if (!ModelState.IsValid)
@@ -58,6 +64,7 @@ public class PostalCodesController(BandvcardDbContext db) : ODataController
         return Updated(entry);
     }
 
+    [Authorize(Roles = Roles.Admin)]
     public async Task<IActionResult> Delete(string key)
     {
         var entry = await db.PostalCodes.FindAsync(key);

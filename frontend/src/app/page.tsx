@@ -7,7 +7,10 @@ async function Welcome() {
   const name = [user.firstName, user.lastName].filter(Boolean).join(" ") || user.email;
   return (
     <>
-      <p className="text-zinc-600 dark:text-zinc-400">Angemeldet als {name}</p>
+      <p className="text-zinc-600 dark:text-zinc-400">
+        Angemeldet als {name}
+        {user.role === "Admin" && " (Admin)"}
+      </p>
       <Link href="/kontakte" className="flex h-12 items-center justify-center rounded-full border border-black/10 px-6 font-medium dark:border-white/20">
         Kontakte
       </Link>

@@ -1,5 +1,7 @@
+using Bandvcard.Api.Data;
 using Bandvcard.Api.Storage;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.EntityFrameworkCore;
 
 namespace Bandvcard.Api.Controllers;
 
@@ -7,7 +9,11 @@ namespace Bandvcard.Api.Controllers;
 // controller, so they are covered by the login like the rest of the API.
 [ApiController]
 [Route("api/photos")]
-public class PhotosController(IPhotoStorage storage, TimeProvider timeProvider) : ControllerBase
+public class PhotosController(
+    IPhotoStorage storage,
+    BandvcardDbContext db,
+    ICurrentUser currentUser,
+    TimeProvider timeProvider) : ControllerBase
 {
     public const long MaxSize = 15 * 1024 * 1024;
 
@@ -45,6 +51,15 @@ public class PhotosController(IPhotoStorage storage, TimeProvider timeProvider) 
     public async Task<IActionResult> Get(string key, CancellationToken cancellationToken)
     {
         if (!PhotoLinks.IsKey(key))
+        {
+            return NotFound();
+        }
+
+        // A photo is as visible as the contacts it belongs to: users get it only through
+        // one of their own contacts, admins always.
+        var link = PhotoLinks.ToLink(key);
+        if (!currentUser.IsAdmin
+            && !await db.Contacts.AnyAsync(c => c.PhotoLink == link && c.CreatedBy == currentUser.Name, cancellationToken))
         {
             return NotFound();
         }

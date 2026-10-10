@@ -4,7 +4,7 @@ using Microsoft.EntityFrameworkCore;
 
 namespace Bandvcard.Api.Auth;
 
-public class UserSignInService(BandvcardDbContext db)
+public class UserSignInService(BandvcardDbContext db, AdminEmails adminEmails)
 {
     public static string NormalizeEmail(string email) => email.Trim().ToLowerInvariant();
 
@@ -23,12 +23,18 @@ public class UserSignInService(BandvcardDbContext db)
                 LastName = lastName ?? "",
             };
             db.Users.Add(user);
-            await db.SaveChangesAsync();
         }
+
+        if (adminEmails.Contains(email))
+        {
+            user.Role = UserRole.Admin;
+        }
+
+        await db.SaveChangesAsync();
 
         return user.Status == UserStatus.Active ? user : null;
     }
 
-    public Task<bool> IsActiveAsync(string email) =>
-        db.Users.AnyAsync(u => u.Email == email && u.Status == UserStatus.Active);
+    public Task<User?> FindActiveAsync(string email) =>
+        db.Users.AsNoTracking().FirstOrDefaultAsync(u => u.Email == email && u.Status == UserStatus.Active);
 }

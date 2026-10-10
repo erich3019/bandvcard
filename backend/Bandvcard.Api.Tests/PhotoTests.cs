@@ -3,6 +3,7 @@ using System.Net;
 using System.Net.Http.Headers;
 using System.Net.Http.Json;
 using System.Text.Json;
+using Bandvcard.Api.Auth;
 using Bandvcard.Api.Storage;
 using Microsoft.Extensions.DependencyInjection;
 
@@ -45,12 +46,17 @@ public class PhotoTests(ApiFactory factory) : IClassFixture<ApiFactory>
 {
     private static readonly byte[] Image = [0xFF, 0xD8, 0xFF, 0xE0, 1, 2, 3, 4];
 
-    private HttpClient CreateClient(bool loggedIn = true)
+    private HttpClient CreateClient(bool loggedIn = true, string user = "tester@example.com", string? role = null)
     {
         var client = factory.CreateClient();
         if (loggedIn)
         {
-            client.DefaultRequestHeaders.Add(TestAuthHandler.Header, "tester@example.com");
+            client.DefaultRequestHeaders.Add(TestAuthHandler.Header, user);
+        }
+
+        if (role is not null)
+        {
+            client.DefaultRequestHeaders.Add(TestAuthHandler.RoleHeader, role);
         }
 
         return client;
@@ -74,6 +80,8 @@ public class PhotoTests(ApiFactory factory) : IClassFixture<ApiFactory>
             .RootElement.GetProperty("photoLink").GetString()!;
         Assert.Matches(@"^/api/photos/\d{4}/\d{2}/[0-9a-f]{32}\.jpg$", link);
 
+        // A photo becomes readable through a contact of the user.
+        await CreateContactAsync(client, link);
         var download = await client.GetAsync(link);
         Assert.Equal(HttpStatusCode.OK, download.StatusCode);
         Assert.Equal("image/jpeg", download.Content.Headers.ContentType?.MediaType);
@@ -154,7 +162,31 @@ public class PhotoTests(ApiFactory factory) : IClassFixture<ApiFactory>
         }
 
         Assert.Equal(HttpStatusCode.NotFound, (await client.GetAsync(contact)).StatusCode);
-        Assert.Equal(HttpStatusCode.OK, (await client.GetAsync(link)).StatusCode);
+        // The photo is still stored; without a contact only an admin can see that.
+        var admin = CreateClient(user: "admin@example.com", role: Roles.Admin);
+        Assert.Equal(HttpStatusCode.OK, (await admin.GetAsync(link)).StatusCode);
+    }
+
+    [Fact]
+    public async Task Photo_IsOnlyReadableByItsOwnerAndAdmins()
+    {
+        var owner = CreateClient();
+        var other = CreateClient(user: "other@example.com");
+        var admin = CreateClient(user: "admin@example.com", role: Roles.Admin);
+        var link = await UploadAsync(owner);
+
+        // Not attached to a contact yet: nobody but an admin can read it.
+        Assert.Equal(HttpStatusCode.NotFound, (await owner.GetAsync(link)).StatusCode);
+        await CreateContactAsync(owner, link);
+
+        Assert.Equal(HttpStatusCode.OK, (await owner.GetAsync(link)).StatusCode);
+        Assert.Equal(HttpStatusCode.NotFound, (await other.GetAsync(link)).StatusCode);
+        Assert.Equal(HttpStatusCode.OK, (await admin.GetAsync(link)).StatusCode);
+
+        // Attaching the foreign photo to an own contact must not unlock it.
+        var steal = await other.PostAsJsonAsync("/api/Contacts", new { lastName = "Dieb", photoLink = link });
+        Assert.Equal(HttpStatusCode.BadRequest, steal.StatusCode);
+        Assert.Equal(HttpStatusCode.NotFound, (await other.GetAsync(link)).StatusCode);
     }
 
     [Fact]

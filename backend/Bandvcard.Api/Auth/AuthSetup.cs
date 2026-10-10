@@ -26,6 +26,7 @@ public static class AuthSetup
                 new Claim(ClaimTypes.Name, user.Email),
                 new Claim(ClaimTypes.GivenName, user.FirstName),
                 new Claim(ClaimTypes.Surname, user.LastName),
+                new Claim(ClaimTypes.Role, user.Role.ToString()),
             ],
             authenticationType));
 
@@ -34,6 +35,7 @@ public static class AuthSetup
     public static void AddBandvcardAuth(this WebApplicationBuilder builder)
     {
         var services = builder.Services;
+        services.AddSingleton<AdminEmails>();
         services.AddScoped<UserSignInService>();
 
         if (GetDevLoginEmail(builder.Configuration) is not null && !builder.Environment.IsDevelopment())
@@ -72,7 +74,7 @@ public static class AuthSetup
                     context.Response.StatusCode = StatusCodes.Status403Forbidden;
                     return Task.CompletedTask;
                 };
-                options.Events.OnValidatePrincipal = RejectInactiveUserAsync;
+                options.Events.OnValidatePrincipal = ValidateSessionAsync;
             });
 
         var entra = builder.Configuration.GetSection("Entra");
@@ -143,15 +145,25 @@ public static class AuthSetup
         context.Principal = CreatePrincipal(user, principal.Identity!.AuthenticationType);
     }
 
-    // A user deactivated after login loses access on the next request.
-    private static async Task RejectInactiveUserAsync(CookieValidatePrincipalContext context)
+    // Checked on every request, so deactivating a user or changing their role takes effect
+    // immediately instead of at the next login.
+    private static async Task ValidateSessionAsync(CookieValidatePrincipalContext context)
     {
         var email = context.Principal?.Identity?.Name;
         var signIn = context.HttpContext.RequestServices.GetRequiredService<UserSignInService>();
-        if (email is null || !await signIn.IsActiveAsync(email))
+        var user = email is null ? null : await signIn.FindActiveAsync(email);
+        if (user is null)
         {
             context.RejectPrincipal();
             await context.HttpContext.SignOutAsync(CookieAuthenticationDefaults.AuthenticationScheme);
+            return;
+        }
+
+        var principal = context.Principal!;
+        if (principal.FindFirstValue(ClaimTypes.Role) != user.Role.ToString())
+        {
+            context.ReplacePrincipal(CreatePrincipal(user, principal.Identity!.AuthenticationType));
+            context.ShouldRenew = true;
         }
     }
 }

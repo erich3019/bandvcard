@@ -46,6 +46,8 @@ services:
       ASPNETCORE_ENVIRONMENT: ${ASPNETCORE_ENVIRONMENT:-Development}
       # Test switch: sign in as this user without Microsoft. Leave empty to use Entra.
       Auth__DevLoginEmail: ${DEV_LOGIN_EMAIL:-}
+      # Comma-separated addresses that are made admin at every login.
+      Auth__AdminEmails: ${ADMIN_EMAILS:-}
       # Without the test switch, login stays disabled (503) until all three Entra values are set.
       Entra__TenantId: ${ENTRA_TENANT_ID:-}
       Entra__ClientId: ${ENTRA_CLIENT_ID:-}

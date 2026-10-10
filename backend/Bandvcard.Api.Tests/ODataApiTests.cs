@@ -22,6 +22,8 @@ public class ApiFactory : WebApplicationFactory<Program>
 {
     private readonly string _databaseName = Guid.NewGuid().ToString();
 
+    public const string ConfiguredAdmin = "configured-admin@example.com";
+
     // False keeps the real cookie authentication instead of the header-based test scheme.
     protected virtual bool UseTestAuth => true;
 
@@ -29,6 +31,7 @@ public class ApiFactory : WebApplicationFactory<Program>
     {
         // Keep the tests independent of a developer's .env file.
         builder.UseSetting(AuthSetup.DevLoginEmailKey, "");
+        builder.UseSetting(AdminEmails.Key, ConfiguredAdmin);
         // Keep the tests independent of Entra values in a developer's .env file.
         builder.UseSetting("Entra:TenantId", "");
         builder.UseSetting("Entra:ClientId", "");
@@ -61,7 +64,8 @@ public class ApiFactory : WebApplicationFactory<Program>
     }
 }
 
-// Authenticates a request as the user named in the X-Test-User header.
+// Authenticates a request as the user named in the X-Test-User header,
+// with the role from X-Test-Role (a normal user if absent).
 public class TestAuthHandler(
     IOptionsMonitor<AuthenticationSchemeOptions> options,
     ILoggerFactory logger,
@@ -69,6 +73,7 @@ public class TestAuthHandler(
 {
     public const string SchemeName = "Test";
     public const string Header = "X-Test-User";
+    public const string RoleHeader = "X-Test-Role";
 
     protected override Task<AuthenticateResult> HandleAuthenticateAsync()
     {
@@ -78,7 +83,11 @@ public class TestAuthHandler(
         }
 
         var identity = new ClaimsIdentity(
-            [new Claim(ClaimTypes.Name, user.ToString()), new Claim(ClaimTypes.GivenName, "Test")],
+            [
+                new Claim(ClaimTypes.Name, user.ToString()),
+                new Claim(ClaimTypes.GivenName, "Test"),
+                new Claim(ClaimTypes.Role, Request.Headers.TryGetValue(RoleHeader, out var role) ? role.ToString() : Roles.User),
+            ],
             SchemeName);
         return Task.FromResult(AuthenticateResult.Success(
             new AuthenticationTicket(new ClaimsPrincipal(identity), SchemeName)));
@@ -91,10 +100,15 @@ public class ODataApiTests : IClassFixture<ApiFactory>
 
     public const string TestUser = "tester@example.com";
 
+    private readonly HttpClient _admin;
+
     public ODataApiTests(ApiFactory factory)
     {
         _client = factory.CreateClient();
         _client.DefaultRequestHeaders.Add(TestAuthHandler.Header, TestUser);
+        _admin = factory.CreateClient();
+        _admin.DefaultRequestHeaders.Add(TestAuthHandler.Header, "admin@example.com");
+        _admin.DefaultRequestHeaders.Add(TestAuthHandler.RoleHeader, Roles.Admin);
     }
 
     private static async Task<JsonElement> ReadJsonAsync(HttpResponseMessage response) =>
@@ -181,7 +195,7 @@ public class ODataApiTests : IClassFixture<ApiFactory>
     [Fact]
     public async Task PostalCode_InUse_CannotBeDeleted_AndExpandsOnContact()
     {
-        var entry = await _client.PostAsJsonAsync("/api/PostalCodes", new { postalCode = "8000", placeName = "Zürich" });
+        var entry = await _admin.PostAsJsonAsync("/api/PostalCodes", new { postalCode = "8000", placeName = "Zürich" });
         Assert.Equal(HttpStatusCode.Created, entry.StatusCode);
         var create = await _client.PostAsJsonAsync("/api/Contacts", new { lastName = "Zh", postalCode = "8000" });
         var id = (await ReadJsonAsync(create)).GetProperty("id").GetGuid();
@@ -189,7 +203,7 @@ public class ODataApiTests : IClassFixture<ApiFactory>
         var expanded = await ReadJsonAsync(await _client.GetAsync($"/api/Contacts({id})?$expand=postalCodeEntry"));
         Assert.Equal("Zürich", expanded.GetProperty("postalCodeEntry").GetProperty("placeName").GetString());
 
-        var delete = await _client.DeleteAsync("/api/PostalCodes('8000')");
+        var delete = await _admin.DeleteAsync("/api/PostalCodes('8000')");
         Assert.Equal(HttpStatusCode.Conflict, delete.StatusCode);
     }
 
@@ -197,22 +211,22 @@ public class ODataApiTests : IClassFixture<ApiFactory>
     public async Task User_EmailIsUniqueKeyAndCannotBeChanged()
     {
         var user = new { email = "erika@example.com", firstName = "Erika", lastName = "Muster", status = "Active" };
-        Assert.Equal(HttpStatusCode.Created, (await _client.PostAsJsonAsync("/api/Users", user)).StatusCode);
-        Assert.Equal(HttpStatusCode.Conflict, (await _client.PostAsJsonAsync("/api/Users", user)).StatusCode);
+        Assert.Equal(HttpStatusCode.Created, (await _admin.PostAsJsonAsync("/api/Users", user)).StatusCode);
+        Assert.Equal(HttpStatusCode.Conflict, (await _admin.PostAsJsonAsync("/api/Users", user)).StatusCode);
 
-        var deactivate = await _client.PatchAsJsonAsync("/api/Users('erika@example.com')", new { status = "Inactive" });
+        var deactivate = await _admin.PatchAsJsonAsync("/api/Users('erika@example.com')", new { status = "Inactive" });
         Assert.Equal(HttpStatusCode.NoContent, deactivate.StatusCode);
-        var read = await ReadJsonAsync(await _client.GetAsync("/api/Users('erika@example.com')"));
+        var read = await ReadJsonAsync(await _admin.GetAsync("/api/Users('erika@example.com')"));
         Assert.Equal("Inactive", read.GetProperty("status").GetString());
 
-        var rename = await _client.PatchAsJsonAsync("/api/Users('erika@example.com')", new { email = "other@example.com" });
+        var rename = await _admin.PatchAsJsonAsync("/api/Users('erika@example.com')", new { email = "other@example.com" });
         Assert.Equal(HttpStatusCode.BadRequest, rename.StatusCode);
     }
 
     [Fact]
     public async Task User_WithoutRequiredFields_IsRejected()
     {
-        var response = await _client.PostAsJsonAsync("/api/Users", new { email = "incomplete@example.com" });
+        var response = await _admin.PostAsJsonAsync("/api/Users", new { email = "incomplete@example.com" });
 
         Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
     }

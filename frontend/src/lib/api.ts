@@ -54,6 +54,19 @@ export async function updateContact(id: string, fields: CardFields): Promise<voi
   await send(`/api/Contacts(${id})`, { method: "PATCH", headers: json, body: toPayload(fields) });
 }
 
+// OData key of a user: the email as a string literal, with single quotes doubled.
+function userUrl(email: string): string {
+  return `/api/Users('${encodeURIComponent(email.replaceAll("'", "''"))}')`;
+}
+
+export async function updateUser(email: string, change: { role?: string; status?: string }): Promise<void> {
+  await send(userUrl(email), { method: "PATCH", headers: json, body: JSON.stringify(change) });
+}
+
+export async function deleteUser(email: string): Promise<void> {
+  await send(userUrl(email), { method: "DELETE" });
+}
+
 export async function deleteContact(id: string): Promise<void> {
   await send(`/api/Contacts(${id})`, { method: "DELETE" });
 }
