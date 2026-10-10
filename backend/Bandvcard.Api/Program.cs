@@ -1,5 +1,6 @@
 using Bandvcard.Api.Auth;
 using Bandvcard.Api.Data;
+using Bandvcard.Api.Storage;
 using Microsoft.AspNetCore.HttpOverrides;
 using Microsoft.AspNetCore.OData;
 using Microsoft.EntityFrameworkCore;
@@ -20,6 +21,8 @@ builder.Services.AddScoped<ICurrentUser, HttpContextCurrentUser>();
 builder.Services.AddDbContext<BandvcardDbContext>(options =>
     options.UseNpgsql(builder.Configuration.GetConnectionString("Default")));
 builder.AddBandvcardAuth();
+builder.Services.AddSingleton<IPhotoStorage>(_ => new MinioPhotoStorage(
+    builder.Configuration.GetSection("Minio").Get<MinioOptions>() ?? new MinioOptions()));
 builder.Services.Configure<ForwardedHeadersOptions>(options =>
 {
     options.ForwardedHeaders =

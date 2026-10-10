@@ -47,6 +47,13 @@ public static class DotEnv
         configuration["Entra:ClientId"] ??= Env("ENTRA_CLIENT_ID");
         configuration["Entra:ClientSecret"] ??= Env("ENTRA_CLIENT_SECRET");
         configuration["Auth:DevLoginEmail"] ??= Env("DEV_LOGIN_EMAIL");
+
+        if (Env("MINIO_ROOT_PASSWORD") is { } minioSecret)
+        {
+            configuration["Minio:Endpoint"] ??= $"localhost:{Env("MINIO_API_PORT") ?? "9000"}";
+            configuration["Minio:AccessKey"] ??= Env("MINIO_ROOT_USER");
+            configuration["Minio:SecretKey"] ??= minioSecret;
+        }
     }
 
     private static string? Find(string startDirectory)

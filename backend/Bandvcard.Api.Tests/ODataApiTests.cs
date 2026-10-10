@@ -5,6 +5,7 @@ using System.Text.Encodings.Web;
 using System.Text.Json;
 using Bandvcard.Api.Auth;
 using Bandvcard.Api.Data;
+using Bandvcard.Api.Storage;
 using Microsoft.AspNetCore.Authentication;
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Mvc.Testing;
@@ -39,6 +40,9 @@ public class ApiFactory : WebApplicationFactory<Program>
             services.RemoveAll<IDbContextOptionsConfiguration<BandvcardDbContext>>();
             services.AddDbContext<BandvcardDbContext>(options =>
                 options.UseInMemoryDatabase(_databaseName));
+
+            services.RemoveAll<IPhotoStorage>();
+            services.AddSingleton<IPhotoStorage, InMemoryPhotoStorage>();
 
             if (!UseTestAuth)
             {
@@ -149,11 +153,29 @@ public class ODataApiTests : IClassFixture<ApiFactory>
     }
 
     [Fact]
-    public async Task Contact_WithUnknownPostalCode_IsRejected()
+    public async Task Contact_WithUnknownPostalCodeAndNoCity_IsRejected()
     {
         var response = await _client.PostAsJsonAsync("/api/Contacts", new { lastName = "X", postalCode = "00000" });
 
         Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
+    }
+
+    [Fact]
+    public async Task Contact_WithUnknownPostalCodeAndCity_AddsItToTheDirectory()
+    {
+        var create = await _client.PostAsJsonAsync(
+            "/api/Contacts", new { lastName = "Neu", postalCode = "3011", city = " Bern " });
+        Assert.Equal(HttpStatusCode.Created, create.StatusCode);
+
+        var entry = await ReadJsonAsync(await _client.GetAsync("/api/PostalCodes('3011')"));
+        Assert.Equal("Bern", entry.GetProperty("placeName").GetString());
+
+        // A second contact with the same postal code reuses the entry and does not rename it.
+        var second = await _client.PostAsJsonAsync(
+            "/api/Contacts", new { lastName = "Zwei", postalCode = "3011", city = "Berne" });
+        Assert.Equal(HttpStatusCode.Created, second.StatusCode);
+        entry = await ReadJsonAsync(await _client.GetAsync("/api/PostalCodes('3011')"));
+        Assert.Equal("Bern", entry.GetProperty("placeName").GetString());
     }
 
     [Fact]

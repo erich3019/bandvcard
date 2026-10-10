@@ -51,6 +51,9 @@ services:
       Entra__ClientId: ${ENTRA_CLIENT_ID:-}
       Entra__ClientSecret: ${ENTRA_CLIENT_SECRET:-}
       DataProtection__KeysPath: /keys
+      Minio__Endpoint: minio:9000
+      Minio__AccessKey: ${MINIO_ROOT_USER}
+      Minio__SecretKey: ${MINIO_ROOT_PASSWORD}
     volumes:
       - backend-keys:/keys
     depends_on:

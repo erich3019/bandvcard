@@ -16,9 +16,11 @@ Frontend (run in `frontend/`, npm, Next.js 16 with App Router, TypeScript, Tailw
 npm run dev      # dev server on http://localhost:3000
 npm run build
 npm run lint
+npm test                              # vitest
+npx vitest run src/lib/parse-card.test.ts -t "Swiss"   # single file / test name
 ```
 
-No frontend test runner is configured yet. Read `frontend/AGENTS.md` before writing Next.js code: this Next.js version has breaking changes and ships its docs in `node_modules/next/dist/docs/`.
+`dev` and `build` first run `scripts/copy-tesseract.mjs`, which copies the Tesseract.js worker, WebAssembly cores and language data from `node_modules` into the git-ignored `public/tesseract/`. Read `frontend/AGENTS.md` before writing Next.js code: this Next.js version has breaking changes and ships its docs in `node_modules/next/dist/docs/`.
 
 Backend (run in `backend/`, .NET 10, solution `Bandvcard.slnx`):
 
@@ -43,7 +45,7 @@ Backend structure (`Bandvcard.Api`):
 - Migrations live in `Migrations/` and are not applied automatically at startup.
 - Passwords and secrets live only in the root `.env` (git-ignored; template `.env.example`), never in `appsettings*.json`. `Data/DotEnv.cs` loads that file for local `dotnet run`/`dotnet ef` and builds `ConnectionStrings:Default` from `POSTGRES_*` (host `localhost`, port `POSTGRES_PORT`) and the `Entra:*` settings from `ENTRA_*`. Real environment variables and explicit configuration win, which is how compose passes its own connection string.
 - `Data/EdmModel.cs` defines the OData entity sets `Contacts`, `Users` and `PostalCodes`, served under `/api` (e.g. `/api/Contacts(<guid>)`, `/api/Users('a@b.c')`, `/api/$metadata`). JSON property names are lower camel case. A new entity needs an entry there plus a controller whose name matches the entity set.
-- `Controllers/`: one `ODataController` per entity set with `Get`, `Get(key)`, `Post`, `Patch` (via `Delta<T>`) and `Delete`; no `Put`. Query options `$filter`, `$select`, `$orderby`, `$expand`, `$count` are enabled, `$top` is capped at 100 and collections page at 100. Keys cannot be changed, a contact's postal code must exist in `PostalCodes`, and a postal code in use cannot be deleted.
+- `Controllers/`: one `ODataController` per entity set with `Get`, `Get(key)`, `Post`, `Patch` (via `Delta<T>`) and `Delete`; no `Put`. Query options `$filter`, `$select`, `$orderby`, `$expand`, `$count` are enabled, `$top` is capped at 100 and collections page at 100. Keys cannot be changed, an unknown postal code on a contact is added to `PostalCodes` (see Capturing a business card), and a postal code in use cannot be deleted.
 - Every endpoint requires a logged-in user (authorization fallback policy) except `/api/auth/login` and `/api/auth/logout`; there are no roles, so any logged-in user can do everything, including managing users.
 - Tests use the EF Core in-memory provider, so they do not need a database. `ODataApiTests` runs the real HTTP pipeline through `WebApplicationFactory`; the in-memory provider does not enforce foreign keys, so those rules are checked in the controllers.
 
@@ -76,10 +78,26 @@ Login is handled by the backend, not the frontend: OpenID Connect (authorization
 - Configuration: `Entra:TenantId`, `Entra:ClientId`, `Entra:ClientSecret` (in compose: `ENTRA_*` in `.env`). If any is missing, the app still starts, every protected endpoint returns 401 and `/api/auth/login` returns 503. Single tenant only: the email claim is not a safe identity across tenants.
 - Test switch `DEV_LOGIN_EMAIL` in `.env` (`Auth:DevLoginEmail`): when set, `/api/auth/login` signs in as that user without Microsoft, through the same user creation, cookie and inactive check. It takes precedence over Entra. The backend refuses to start with it outside `ASPNETCORE_ENVIRONMENT=Development`. The compose backend defaults to Development for this reason; set `ASPNETCORE_ENVIRONMENT=Production` in `.env` for real use.
 - The Entra app registration needs the redirect URI `<origin>/api/auth/callback` (type Web), e.g. `http://localhost:8080/api/auth/callback`. The backend derives the origin from `X-Forwarded-Host`/`X-Forwarded-Proto`, which nginx sets.
-- Frontend: `src/proxy.ts` (Next.js 16 name for middleware) redirects requests without the cookie to `/login`; that check is optimistic. `src/lib/auth.ts` `getCurrentUser()` is the real check: it forwards the cookie to `/api/auth/me` using `BACKEND_URL` and redirects to `/login` on 401. Because `cacheComponents` is on, call it only inside a `<Suspense>` boundary. The cookie name is duplicated in `proxy.ts` and `AuthSetup.cs`.
+- Frontend: `src/proxy.ts` (Next.js 16 name for middleware) redirects requests without the cookie to `/login` (except `/login`, `/api`, `/tesseract` and static files); that check is optimistic. `src/lib/auth.ts` `getCurrentUser()` is the real check: it forwards the cookie to `/api/auth/me` using `BACKEND_URL` and redirects to `/login` on 401. Because `cacheComponents` is on, call it only inside a `<Suspense>` boundary. The cookie name is duplicated in `proxy.ts` and `AuthSetup.cs`.
 - With `npm run dev` (no nginx), `next.config.ts` rewrites `/api/*` to `BACKEND_URL` (default `http://localhost:5048`).
 - Backend tests replace the login with `TestAuthHandler`: send the header `X-Test-User: <email>` to act as that user.
 - In compose the cookie encryption keys persist in the `backend-keys` volume (`DataProtection:KeysPath`); without it, sessions end on every backend restart.
+
+## Capturing a business card
+
+Page `/erfassen` (`frontend/src/app/erfassen/`, UI text in German), a client component with the steps photo -> OCR -> review form -> save:
+
+1. `<input type="file" capture="environment">` takes the photo (camera on phones, file picker on desktops). `lib/image.ts` scales it to max. 2000 px, applies EXIF rotation and makes a JPEG; that JPEG is what gets OCR'd and stored.
+2. `lib/ocr.ts` runs Tesseract.js (German + English) in the browser from the self-hosted files under `/tesseract`; nothing is loaded from a CDN and the photo is not sent anywhere for OCR. Adding a language means changing both `lib/ocr.ts` and `scripts/copy-tesseract.mjs` and installing `@tesseract.js-data/<lang>`.
+3. `lib/parse-card.ts` turns the OCR text into contact fields with regex heuristics (German/Swiss/Austrian cards). It is a pure function with tests; extend it there. The user corrects the result in the form.
+4. Save (`lib/api.ts`): `POST /api/photos` (multipart field `file`) returns `{ photoLink }`, then `POST /api/Contacts` with the fields and that link.
+
+Backend side:
+
+- `Controllers/PhotosController.cs` + `Storage/`: photos go into the MinIO bucket `business-cards` (created on first upload) under `yyyy/MM/<guid>.<ext>`; JPEG, PNG, WebP up to 15 MB. `PhotoLink` is the relative URL `/api/photos/<key>`, served by the same controller, so photos need a login and MinIO is never exposed to the browser. Tests swap `IPhotoStorage` for an in-memory fake.
+- The backend uses the MinIO root credentials (`Minio:*`, from `MINIO_ROOT_*`); a dedicated access key does not exist yet.
+- Saving a contact with a postal code that is not in `PostalCodes` adds it with the contact's city as place name (400 if there is no city). The directory therefore grows from captured cards; there is no import.
+- Deleting a contact does not delete its photo, and a failed contact save after a successful upload leaves an orphaned photo.
 
 ## Planned stack
 
@@ -99,7 +117,7 @@ Login is handled by the backend, not the frontend: OpenID Connect (authorization
 4. The original photo is stored in MinIO; the resulting link is passed to the backend.
 5. The backend persists the contact in PostgreSQL, fills the audit fields, and stores the MinIO link on the contact.
 
-The spec does not say explicitly whether the frontend or the backend performs the MinIO upload; it only says the backend receives the link. Clarify before implementing.
+Decided since: OCR is Tesseract.js in the browser, and the frontend uploads the photo through the backend (see Capturing a business card).
 
 ## Domain model
 
@@ -121,7 +139,6 @@ The spec uses German names; the terms in parentheses are the spec's originals.
 
 These are explicitly undecided in the spec; ask rather than assume:
 
-- OCR library or service for the frontend (candidates named: Tesseract.js, Google Vision API, Azure Cognitive Services)
 - Authorisation concept (roles, access rights) is not specified; login exists, roles do not
 - Import source for postal code data (e.g. Deutsche Post, OpenPLZ)
-- MinIO bucket structure and access rights
+- MinIO access rights (a single bucket and the root credentials are used for now)
