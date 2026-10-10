@@ -52,13 +52,15 @@ Backend structure (`Bandvcard.Api`):
 Full stack (run in the repo root; needs `.env`, copy from `.env.example`):
 
 ```bash
+./scripts/generate-cert.sh        # once: self-signed TLS certificate in nginx/certs (git-ignored); nginx does not start without it
 ./scripts/generate-passwords.sh   # once: random POSTGRES_PASSWORD / MINIO_ROOT_PASSWORD in .env (--force replaces existing ones)
 docker compose up -d --build   # postgres, minio, backend, frontend, nginx
 docker compose logs -f backend
 docker compose down            # add -v to also delete the postgres and minio volumes
 ```
 
-- nginx is the only entry point for the apps: http://localhost:8080. `/api/` goes to the backend with the prefix kept (backend routes must be registered under `/api`), everything else goes to the frontend. TLS termination is not configured yet.
+- nginx is the only entry point for the apps and terminates TLS: https://localhost:8443 (HTTP/2, self-signed certificate, so browsers warn until it is trusted). http://localhost:8080 only redirects there with 308. `/api/` goes to the backend with the prefix kept (backend routes must be registered under `/api`), everything else goes to the frontend. The config is `nginx/default.conf.template`, rendered by the nginx image at start; only `${NGINX_HTTPS_PORT}` is substituted. No HSTS header is sent, on purpose: on `localhost` it would apply to every port and break other local projects.
+- nginx binds to `NGINX_BIND` (default 127.0.0.1). `0.0.0.0` makes the app reachable in the network, e.g. for testing the camera on a phone via `https://<ip>:8443`; never combine that with `DEV_LOGIN_EMAIL`. The certificate covers localhost, the host name and the LAN address at creation time; pass further names to `generate-cert.sh --force`.
 - Host ports are bound to 127.0.0.1 and set in `.env`: postgres 5433 (not 5432), MinIO API 9000, MinIO console 9001.
 - The backend container gets `ConnectionStrings__Default` pointing at the `postgres` service. No MinIO settings are passed to any service.
 - MinIO uses `cgr.dev/chainguard/minio:latest` because official `minio/minio` images are no longer published. Only `latest` is free there, so the version is not pinned.
@@ -77,7 +79,7 @@ Login is handled by the backend, not the frontend: OpenID Connect (authorization
 - The email in the cookie is `User.Identity.Name` and is what `ICurrentUser` writes to `CreatedBy`/`UpdatedBy`.
 - Configuration: `Entra:TenantId`, `Entra:ClientId`, `Entra:ClientSecret` (in compose: `ENTRA_*` in `.env`). If any is missing, the app still starts, every protected endpoint returns 401 and `/api/auth/login` returns 503. Single tenant only: the email claim is not a safe identity across tenants.
 - Test switch `DEV_LOGIN_EMAIL` in `.env` (`Auth:DevLoginEmail`): when set, `/api/auth/login` signs in as that user without Microsoft, through the same user creation, cookie and inactive check. It takes precedence over Entra. The backend refuses to start with it outside `ASPNETCORE_ENVIRONMENT=Development`. The compose backend defaults to Development for this reason; set `ASPNETCORE_ENVIRONMENT=Production` in `.env` for real use.
-- The Entra app registration needs the redirect URI `<origin>/api/auth/callback` (type Web), e.g. `http://localhost:8080/api/auth/callback`. The backend derives the origin from `X-Forwarded-Host`/`X-Forwarded-Proto`, which nginx sets.
+- The Entra app registration needs the redirect URI `<origin>/api/auth/callback` (type Web), e.g. `https://localhost:8443/api/auth/callback`. The backend derives the origin from `X-Forwarded-Host`/`X-Forwarded-Proto`, which nginx sets.
 - Frontend: `src/proxy.ts` (Next.js 16 name for middleware) redirects requests without the cookie to `/login` (except `/login`, `/api`, `/tesseract` and static files); that check is optimistic. `src/lib/auth.ts` `getCurrentUser()` is the real check: it forwards the cookie to `/api/auth/me` using `BACKEND_URL` and redirects to `/login` on 401. Because `cacheComponents` is on, call it only inside a `<Suspense>` boundary. The cookie name is duplicated in `proxy.ts` and `AuthSetup.cs`.
 - With `npm run dev` (no nginx), `next.config.ts` rewrites `/api/*` to `BACKEND_URL` (default `http://localhost:5048`).
 - Backend tests replace the login with `TestAuthHandler`: send the header `X-Test-User: <email>` to act as that user.

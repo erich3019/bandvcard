@@ -1,6 +1,22 @@
+# Rendered by the nginx image at container start: ${NGINX_HTTPS_PORT} is replaced from the
+# environment, nginx's own $variables are left alone.
+
+# Plain HTTP only redirects to HTTPS. 308 keeps the method, so a POST is not turned into a GET.
 server {
     listen 80;
     server_name _;
+    return 308 https://$host:${NGINX_HTTPS_PORT}$request_uri;
+}
+
+server {
+    listen 443 ssl;
+    http2 on;
+    server_name _;
+
+    # Created by scripts/generate-cert.sh (self-signed, for development).
+    ssl_certificate /etc/nginx/certs/server.crt;
+    ssl_certificate_key /etc/nginx/certs/server.key;
+    ssl_protocols TLSv1.2 TLSv1.3;
 
     # Docker's DNS. Resolving per request (via the variables below) keeps nginx working
     # when a container is recreated and gets a new address.
