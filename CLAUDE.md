@@ -99,7 +99,7 @@ Backend side:
 - `Controllers/PhotosController.cs` + `Storage/`: photos go into the MinIO bucket `business-cards` (created on first upload) under `yyyy/MM/<guid>.<ext>`; JPEG, PNG, WebP up to 15 MB. `PhotoLink` is the relative URL `/api/photos/<key>`, served by the same controller, so photos need a login and MinIO is never exposed to the browser. Tests swap `IPhotoStorage` for an in-memory fake.
 - The backend uses the MinIO root credentials (`Minio:*`, from `MINIO_ROOT_*`); a dedicated access key does not exist yet.
 - Saving a contact with a postal code that is not in `PostalCodes` adds it with the contact's city as place name (400 if there is no city). The directory therefore grows from captured cards; there is no import.
-- Deleting a contact does not delete its photo, and a failed contact save after a successful upload leaves an orphaned photo.
+- Deleting a contact deletes its photo from MinIO unless another contact uses the same link; a storage failure there is only logged. `Storage/PhotoLinks.cs` is the one place that maps between `PhotoLink` and the storage key. Photos still become orphans when a contact's `PhotoLink` is changed or cleared via PATCH, and when the contact save fails after a successful upload.
 
 ## Contact list and detail pages
 

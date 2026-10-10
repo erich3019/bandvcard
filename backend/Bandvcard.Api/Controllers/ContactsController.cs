@@ -1,5 +1,6 @@
 using Bandvcard.Api.Data;
 using Bandvcard.Api.Entities;
+using Bandvcard.Api.Storage;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.OData.Deltas;
 using Microsoft.AspNetCore.OData.Query;
@@ -9,7 +10,10 @@ using Microsoft.EntityFrameworkCore;
 
 namespace Bandvcard.Api.Controllers;
 
-public class ContactsController(BandvcardDbContext db) : ODataController
+public class ContactsController(
+    BandvcardDbContext db,
+    IPhotoStorage photos,
+    ILogger<ContactsController> logger) : ODataController
 {
     [EnableQuery(PageSize = 100)]
     public IQueryable<Contact> Get() => db.Contacts;
@@ -77,7 +81,28 @@ public class ContactsController(BandvcardDbContext db) : ODataController
 
         db.Contacts.Remove(contact);
         await db.SaveChangesAsync();
+        await DeleteUnusedPhotoAsync(contact.PhotoLink);
         return NoContent();
+    }
+
+    // Runs after the contact is gone. A photo that cannot be removed only leaves an unused
+    // file behind, so it is logged and does not fail the request.
+    private async Task DeleteUnusedPhotoAsync(string? photoLink)
+    {
+        if (!PhotoLinks.TryGetKey(photoLink, out var key)
+            || await db.Contacts.AnyAsync(c => c.PhotoLink == photoLink))
+        {
+            return;
+        }
+
+        try
+        {
+            await photos.DeleteAsync(key, HttpContext.RequestAborted);
+        }
+        catch (Exception e)
+        {
+            logger.LogWarning(e, "Could not delete photo {Key} of a deleted contact", key);
+        }
     }
 
     // The directory grows with the captured cards: an unknown postal code is added with the

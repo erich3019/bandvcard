@@ -1,4 +1,3 @@
-using System.Text.RegularExpressions;
 using Bandvcard.Api.Storage;
 using Microsoft.AspNetCore.Mvc;
 
@@ -8,7 +7,7 @@ namespace Bandvcard.Api.Controllers;
 // controller, so they are covered by the login like the rest of the API.
 [ApiController]
 [Route("api/photos")]
-public partial class PhotosController(IPhotoStorage storage, TimeProvider timeProvider) : ControllerBase
+public class PhotosController(IPhotoStorage storage, TimeProvider timeProvider) : ControllerBase
 {
     public const long MaxSize = 15 * 1024 * 1024;
 
@@ -18,9 +17,6 @@ public partial class PhotosController(IPhotoStorage storage, TimeProvider timePr
         ["image/png"] = "png",
         ["image/webp"] = "webp",
     };
-
-    [GeneratedRegex(@"^\d{4}/\d{2}/[0-9a-f]{32}\.(jpg|png|webp)$")]
-    private static partial Regex KeyPattern();
 
     // Returns the link to store in Contact.PhotoLink.
     [HttpPost]
@@ -42,13 +38,13 @@ public partial class PhotosController(IPhotoStorage storage, TimeProvider timePr
         await using var stream = file.OpenReadStream();
         await storage.SaveAsync(key, stream, file.Length, file.ContentType, cancellationToken);
 
-        return Ok(new { photoLink = $"/api/photos/{key}" });
+        return Ok(new { photoLink = PhotoLinks.ToLink(key) });
     }
 
     [HttpGet("{**key}")]
     public async Task<IActionResult> Get(string key, CancellationToken cancellationToken)
     {
-        if (!KeyPattern().IsMatch(key))
+        if (!PhotoLinks.IsKey(key))
         {
             return NotFound();
         }

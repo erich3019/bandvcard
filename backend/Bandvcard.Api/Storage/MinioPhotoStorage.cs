@@ -60,6 +60,11 @@ public class MinioPhotoStorage(MinioOptions options) : IPhotoStorage
                 .WithCallbackStream((stream, token) => stream.CopyToAsync(destination, token)),
             cancellationToken);
 
+    public Task DeleteAsync(string key, CancellationToken cancellationToken) =>
+        _client.RemoveObjectAsync(
+            new RemoveObjectArgs().WithBucket(options.Bucket).WithObject(key),
+            cancellationToken);
+
     private async Task EnsureBucketAsync(CancellationToken cancellationToken)
     {
         if (_bucketChecked)

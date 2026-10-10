@@ -8,4 +8,7 @@ public interface IPhotoStorage
     Task<string?> GetContentTypeAsync(string key, CancellationToken cancellationToken);
 
     Task CopyToAsync(string key, Stream destination, CancellationToken cancellationToken);
+
+    // Deleting a key that does not exist is not an error.
+    Task DeleteAsync(string key, CancellationToken cancellationToken);
 }

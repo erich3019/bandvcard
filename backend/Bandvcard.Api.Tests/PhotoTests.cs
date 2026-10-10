@@ -1,8 +1,10 @@
 using System.Collections.Concurrent;
 using System.Net;
 using System.Net.Http.Headers;
+using System.Net.Http.Json;
 using System.Text.Json;
 using Bandvcard.Api.Storage;
+using Microsoft.Extensions.DependencyInjection;
 
 namespace Bandvcard.Api.Tests;
 
@@ -23,6 +25,20 @@ public class InMemoryPhotoStorage : IPhotoStorage
 
     public Task CopyToAsync(string key, Stream destination, CancellationToken cancellationToken) =>
         destination.WriteAsync(_objects[key].Content, cancellationToken).AsTask();
+
+    // Lets a test simulate an unreachable storage.
+    public bool FailDeletes { get; set; }
+
+    public Task DeleteAsync(string key, CancellationToken cancellationToken)
+    {
+        if (FailDeletes)
+        {
+            throw new IOException("storage unavailable");
+        }
+
+        _objects.TryRemove(key, out _);
+        return Task.CompletedTask;
+    }
 }
 
 public class PhotoTests(ApiFactory factory) : IClassFixture<ApiFactory>
@@ -62,6 +78,83 @@ public class PhotoTests(ApiFactory factory) : IClassFixture<ApiFactory>
         Assert.Equal(HttpStatusCode.OK, download.StatusCode);
         Assert.Equal("image/jpeg", download.Content.Headers.ContentType?.MediaType);
         Assert.Equal(Image, await download.Content.ReadAsByteArrayAsync());
+    }
+
+    private static async Task<string> UploadAsync(HttpClient client)
+    {
+        var upload = await client.PostAsync("/api/photos", Form(Image, "image/jpeg"));
+        return JsonDocument.Parse(await upload.Content.ReadAsStringAsync())
+            .RootElement.GetProperty("photoLink").GetString()!;
+    }
+
+    private static async Task<string> CreateContactAsync(HttpClient client, string? photoLink)
+    {
+        var create = await client.PostAsJsonAsync("/api/Contacts", new { lastName = "Foto", photoLink });
+        Assert.Equal(HttpStatusCode.Created, create.StatusCode);
+        var id = JsonDocument.Parse(await create.Content.ReadAsStringAsync()).RootElement.GetProperty("id").GetGuid();
+        return $"/api/Contacts({id})";
+    }
+
+    [Fact]
+    public async Task DeletingAContact_DeletesItsPhoto()
+    {
+        var client = CreateClient();
+        var link = await UploadAsync(client);
+        var contact = await CreateContactAsync(client, link);
+
+        Assert.Equal(HttpStatusCode.NoContent, (await client.DeleteAsync(contact)).StatusCode);
+
+        Assert.Equal(HttpStatusCode.NotFound, (await client.GetAsync(link)).StatusCode);
+    }
+
+    [Fact]
+    public async Task DeletingAContact_KeepsAPhotoThatAnotherContactStillUses()
+    {
+        var client = CreateClient();
+        var link = await UploadAsync(client);
+        var first = await CreateContactAsync(client, link);
+        var second = await CreateContactAsync(client, link);
+
+        await client.DeleteAsync(first);
+        Assert.Equal(HttpStatusCode.OK, (await client.GetAsync(link)).StatusCode);
+
+        await client.DeleteAsync(second);
+        Assert.Equal(HttpStatusCode.NotFound, (await client.GetAsync(link)).StatusCode);
+    }
+
+    [Theory]
+    [InlineData(null)]
+    [InlineData("https://example.com/card.jpg")]
+    [InlineData("/api/photos/../../etc/passwd")]
+    public async Task DeletingAContact_WithoutAStoredPhoto_JustDeletesTheContact(string? photoLink)
+    {
+        var client = CreateClient();
+        var contact = await CreateContactAsync(client, photoLink);
+
+        Assert.Equal(HttpStatusCode.NoContent, (await client.DeleteAsync(contact)).StatusCode);
+        Assert.Equal(HttpStatusCode.NotFound, (await client.GetAsync(contact)).StatusCode);
+    }
+
+    [Fact]
+    public async Task DeletingAContact_StillSucceeds_WhenThePhotoCannotBeDeleted()
+    {
+        var client = CreateClient();
+        var link = await UploadAsync(client);
+        var contact = await CreateContactAsync(client, link);
+        var storage = (InMemoryPhotoStorage)factory.Services.GetRequiredService<IPhotoStorage>();
+
+        storage.FailDeletes = true;
+        try
+        {
+            Assert.Equal(HttpStatusCode.NoContent, (await client.DeleteAsync(contact)).StatusCode);
+        }
+        finally
+        {
+            storage.FailDeletes = false;
+        }
+
+        Assert.Equal(HttpStatusCode.NotFound, (await client.GetAsync(contact)).StatusCode);
+        Assert.Equal(HttpStatusCode.OK, (await client.GetAsync(link)).StatusCode);
     }
 
     [Fact]
