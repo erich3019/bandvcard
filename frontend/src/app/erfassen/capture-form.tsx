@@ -5,7 +5,7 @@ import { useRouter } from "next/navigation";
 import { useRef, useState } from "react";
 import { ContactFields } from "@/components/contact-fields";
 import { createContact, SessionExpiredError, uploadPhoto } from "@/lib/api";
-import { prepareImage } from "@/lib/image";
+import { prepareImage, prepareOcrImage } from "@/lib/image";
 import { recognizeText } from "@/lib/ocr";
 import { type CardFields, emptyCardFields, parseCard } from "@/lib/parse-card";
 
@@ -54,7 +54,7 @@ export function CaptureForm() {
       setPhoto(prepared);
       setPreviewUrl(URL.createObjectURL(prepared));
       try {
-        const text = await recognizeText(prepared, setProgress);
+        const text = await recognizeText(await prepareOcrImage(prepared), setProgress);
         setOcrText(text);
         setFields(parseCard(text));
       } catch (ocrError) {

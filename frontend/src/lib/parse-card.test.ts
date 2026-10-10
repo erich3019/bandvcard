@@ -74,6 +74,103 @@ describe("parseCard", () => {
     expect(fields).toMatchObject({ firstName: "Max", lastName: "Muster", function: "Senior Account Manager" });
   });
 
+  // The next cases are real OCR results of photographed cards, noise included.
+  const gasser = {
+    salutation: "",
+    firstName: "Andreas",
+    lastName: "Gasser",
+    companyName: "Aberegg Consulting AG",
+    function: "",
+    street: "Thunstrasse",
+    houseNumber: "34",
+    postalCode: "3005",
+    city: "Bern",
+    email: "gasser@aberegg-consulting.ch",
+  };
+
+  it("finds the name behind OCR noise and street and place on one line", () => {
+    const fields = parseCard(`AbereggConsultin
+0 A Andreas Gasser
+Aberegg Consulting AG
+Thunstrasse 34 CH-3005 Bern
+gasser@aberegg-consulting.ch
+www.aberegg-consulting.ch
+T +41 31 33380 22
+M +41 79 321 69 27`);
+
+    expect(fields).toEqual({ ...gasser, phone: "+41 31 33380 22" });
+  });
+
+  it("copes with heavy noise around every line", () => {
+    const fields = parseCard(`tl ee ii tcl cn het Si cs So Bl = - -
+AbereggConsultin
+i gh eel Andreas Gasser |
+EE OTE ed A Be Bh as sp em oA EB SL DIeLS 5 0nd ALG Pe Co bie hh 3
+Aberegg Consulting AG |
+Thunstrasse 34 CH-3005 Bern i
+gasser@aberegg-consulting.ch
+
+www.aberegg-consulting.ch 1
+
+T+41313338022 §
+
+M+41793216927 B`);
+
+    expect(fields).toEqual({ ...gasser, phone: "+41313338022" });
+  });
+
+  it("finds the name when OCR merges it with the logo text, and ignores the slogan", () => {
+    const fields = parseCard(`AbereggConsulting Andreas Gasser
+Mehr Mensch, Mehr Qualität,
+nm oe REECE i Se LL LS TE ne
+Aberegg Consulting AG
+Thunstrasse 34 CH-3005 Bern
+gasser@aberegg-consulting.ch
+T +41 31 33380 22`);
+
+    expect(fields).toMatchObject({ firstName: "Andreas", lastName: "Gasser", companyName: "Aberegg Consulting AG" });
+  });
+
+  it("uses an initial-style email address as hint for the last name", () => {
+    const fields = parseCard(`Bernhard Beispiel C
+Einkaufsleiter
+SAMPLE International GmbH
+Musterplatz 1, 1234 Irgendwo
+Tel: +99 12 345 67 89-012
+Fax: +99 12 345 67 89-001
+E-Mail: b.beispiel@sample-corporation.com
+www.sample-corporation.com
+i
+PETE
+J`);
+
+    expect(fields).toEqual({
+      salutation: "",
+      firstName: "Bernhard",
+      lastName: "Beispiel",
+      companyName: "SAMPLE International GmbH",
+      function: "Einkaufsleiter",
+      street: "Musterplatz",
+      houseNumber: "1",
+      postalCode: "1234",
+      city: "Irgendwo",
+      phone: "+99 12 345 67 89-012",
+      email: "b.beispiel@sample-corporation.com",
+    });
+  });
+
+  it("matches umlauts in the name with their spelling in the email address", () => {
+    const fields = parseCard("Lärm Schutz GmbH\nxx Jörg Müller\njoerg.mueller@example.com");
+
+    expect(fields).toMatchObject({ firstName: "Jörg", lastName: "Müller", companyName: "Lärm Schutz GmbH" });
+  });
+
+  it("keeps salutation and title before a name found through the email address", () => {
+    const fields = parseCard("Herr Dr. Hans von Allmen\nallmen@example.ch");
+
+    expect(fields).toMatchObject({ salutation: "Herr Dr.", firstName: "Hans", lastName: "von Allmen" });
+  });
+
   it("returns empty fields for unusable text", () => {
     expect(parseCard("~~ \n ..")).toEqual(emptyCardFields);
   });

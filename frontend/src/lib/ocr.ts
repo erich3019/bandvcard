@@ -5,7 +5,7 @@
 const OCR_LANGUAGES = ["deu", "eng"];
 
 export async function recognizeText(image: Blob, onProgress: (fraction: number) => void): Promise<string> {
-  const { createWorker } = await import("tesseract.js");
+  const { createWorker, PSM } = await import("tesseract.js");
   const worker = await createWorker(OCR_LANGUAGES, 1, {
     workerPath: "/tesseract/worker.min.js",
     corePath: "/tesseract/core",
@@ -17,6 +17,9 @@ export async function recognizeText(image: Blob, onProgress: (fraction: number) 
     },
   });
   try {
+    // Let Tesseract find the text blocks itself. Its default here treats the whole photo as
+    // one block of text and then reads logo, rules and background as garbage lines.
+    await worker.setParameters({ tessedit_pageseg_mode: PSM.AUTO });
     const { data } = await worker.recognize(image);
     return data.text;
   } finally {
