@@ -40,7 +40,7 @@ function toPayload(values: Record<string, string>): string {
 
 const json = { "Content-Type": "application/json" };
 
-// Returns the ID of the new contact.
+// Returns the ID of the new contact. An empty photo link means the contact has no photo.
 export async function createContact(fields: CardFields, photoLink: string): Promise<string> {
   const response = await send("/api/Contacts", {
     method: "POST",

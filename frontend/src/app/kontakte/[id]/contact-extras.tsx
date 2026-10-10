@@ -1,16 +1,11 @@
 "use client";
 
 import { useRouter } from "next/navigation";
-import { useEffect, useRef, useState } from "react";
+import { useState } from "react";
 import { createOpportunity, deleteOpportunity, SessionExpiredError, setAbacusStatus } from "@/lib/api";
 import { abacusStatusLabels, type Contact, OPPORTUNITY_MAX_LENGTH } from "@/lib/contacts";
-import {
-  appendDictation,
-  createSpeechRecognition,
-  readSpeechResult,
-  speechErrorMessage,
-  type SpeechRecognitionLike,
-} from "@/lib/dictation";
+import { appendDictation } from "@/lib/dictation";
+import { useDictation } from "@/lib/use-dictation";
 
 // Fixed time zone, so server and browser render the same text.
 const date = new Intl.DateTimeFormat("de-DE", { dateStyle: "medium", timeZone: "Europe/Berlin" });
@@ -26,50 +21,19 @@ export function ContactExtras({ contact }: { contact: Contact }) {
   const [text, setText] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  // Dictation: what is being said right now, shown until the recogniser settles on it.
-  const [listening, setListening] = useState(false);
-  const [interim, setInterim] = useState("");
-  const recognition = useRef<SpeechRecognitionLike | null>(null);
+  const dictation = useDictation(setError);
+  const { listening, interim } = dictation;
   const opportunities = contact.opportunities ?? [];
-
-  // Leaving the page ends a running dictation.
-  useEffect(() => () => recognition.current?.abort(), []);
+  const status = contact.abacusStatus;
 
   function toggleDictation() {
-    if (recognition.current) {
-      recognition.current.stop();
+    if (listening) {
+      dictation.stop();
       return;
     }
-    const speech = createSpeechRecognition("de-DE");
-    if (!speech) {
-      setError("Dieser Browser unterstützt keine Spracheingabe. Sie funktioniert in Chrome, Edge und Safari.");
-      return;
-    }
-
     setError(null);
-    speech.onresult = (event) => {
-      const spoken = readSpeechResult(event);
-      if (spoken.final) {
-        setText((current) => appendDictation(current, spoken.final, OPPORTUNITY_MAX_LENGTH));
-      }
-      setInterim(spoken.interim);
-    };
-    speech.onerror = (event) => {
-      const message = speechErrorMessage(event.error);
-      if (message) {
-        setError(message);
-      }
-    };
-    speech.onend = () => {
-      recognition.current = null;
-      setListening(false);
-      setInterim("");
-    };
-    recognition.current = speech;
-    setListening(true);
-    speech.start();
+    dictation.start((spoken) => setText((current) => appendDictation(current, spoken, OPPORTUNITY_MAX_LENGTH)));
   }
-  const status = contact.abacusStatus;
 
   async function run(action: () => Promise<void>, failure: string) {
     setError(null);

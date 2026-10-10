@@ -109,6 +109,13 @@ Page `/erfassen` (`frontend/src/app/erfassen/`, UI text in German), a client com
 3. `lib/parse-card.ts` turns the OCR text into contact fields with regex heuristics (German/Swiss/Austrian cards). The name is found first through the email address (`gasser@…`, `erika.mustermann@…`), which survives OCR noise, then by shape. It is a pure function; its tests include real OCR output of photographed cards. When a card is read badly, get its OCR text ("Erkannter Text" in the form), add it as a test case and fix the parser there. The user corrects the result in the form.
 4. Save (`lib/api.ts`): `POST /api/photos` (multipart field `file`) returns `{ photoLink }`, then `POST /api/Contacts` with the fields and that link.
 
+The same page offers two ways without a card, both ending in the same review form and saved without a photo (`PhotoLink` empty):
+
+- **Dictating a contact:** the speaker names each field and then its value ("Vorname Andreas, Nachname Gasser, Firma …"). `lib/parse-spoken.ts` assigns the text by those spoken field names; it is a pure function with tests, and the list of accepted field names lives there. Speech has no layout to guess from, so free speech without field names is deliberately not supported.
+- **Typing by hand:** the empty review form.
+
+Every field of the contact form (`components/contact-fields.tsx`, also used when editing) has a microphone button that dictates into that one field and replaces its content. All dictation goes through the hook `lib/use-dictation.ts` (German, browser speech recognition, see the note on dictation under Opportunities).
+
 Backend side:
 
 - `Controllers/PhotosController.cs` + `Storage/`: photos go into the MinIO bucket `business-cards` (created on first upload) under `yyyy/MM/<guid>.<ext>`; JPEG, PNG, WebP up to 15 MB. `PhotoLink` is the relative URL `/api/photos/<key>`, served by the same controller, so photos need a login and MinIO is never exposed to the browser. Tests swap `IPhotoStorage` for an in-memory fake.
