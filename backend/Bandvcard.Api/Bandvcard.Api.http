@@ -1,0 +1,6 @@
+@Bandvcard.Api_HostAddress = http://localhost:5048
+
+GET {{Bandvcard.Api_HostAddress}}/openapi/v1.json
+Accept: application/json
+
+###

@@ -1,0 +1,4 @@
+<Solution>
+  <Project Path="Bandvcard.Api.Tests/Bandvcard.Api.Tests.csproj" />
+  <Project Path="Bandvcard.Api/Bandvcard.Api.csproj" />
+</Solution>
