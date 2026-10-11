@@ -67,6 +67,24 @@ docker compose down            # add -v to also delete the postgres and minio vo
 - MinIO uses `cgr.dev/chainguard/minio:latest` because official `minio/minio` images are no longer published. Only `latest` is free there, so the version is not pinned.
 - The frontend image relies on `output: "standalone"` in `frontend/next.config.ts`.
 
+Deploying to another machine (needs only Docker, git and openssl there; the images build from source):
+
+```bash
+git clone https://github.com/erich3019/bandvcard.git && cd bandvcard
+./scripts/generate-passwords.sh        # also creates .env from .env.example
+./scripts/generate-cert.sh <ip> ...    # every address the app is opened with
+docker compose up -d --build
+# later: git pull --ff-only && docker compose up -d --build
+```
+
+- `.env` and `nginx/certs/` are git-ignored, so each machine has its own passwords, API key and certificate. Decide `ASPNETCORE_ENVIRONMENT` and `NGINX_BIND` in that `.env` before starting (see Authentication), and pick other `NGINX_*` ports if 8080/8443 are taken.
+- The images contain no .NET SDK, so `dotnet ef database update` cannot run on such a machine. Create the SQL on a development machine and pipe it into the remote database; the script is idempotent, so it is safe to repeat after every update:
+
+```bash
+dotnet ef migrations script --idempotent --project Bandvcard.Api -o migrate.sql    # in backend/
+ssh <host> 'cd bandvcard && docker compose exec -T postgres sh -c "psql -q -v ON_ERROR_STOP=1 -U \$POSTGRES_USER -d \$POSTGRES_DB"' < migrate.sql
+```
+
 ## What bandvcard is
 
 A digital business card manager: the user photographs a business card, OCR runs in the frontend, and the extracted data is stored as a structured contact, with the original photo kept in object storage.
@@ -185,7 +203,7 @@ Undecided; ask rather than assume:
 - MinIO access rights (a single bucket and the root credentials are used for now)
 - A real TLS certificate and host name for production (the certificate is self-signed, no HSTS)
 
-Built but never run for real, as of 2026-10-10; treat as unverified until someone has tried them:
+Built but never run for real, as of 2026-10-11; treat as unverified until someone has tried them:
 
 - The Microsoft Entra login end to end (callback, claims, session cookie): there is no app registration yet. Only the redirect to Microsoft was checked with placeholder values.
 - Everything that needs a browser with camera or microphone was only tested through its pure functions and the HTTP API: taking a photo, the in-browser image enhancement and OCR, dictation of opportunities, contacts and single fields. The user tried card capture on a phone; dictation has no feedback yet.
