@@ -58,18 +58,18 @@ export function Opportunities({ contact }: { contact: Contact }) {
     void run(async () => {
       await createOpportunity(contact.id, text);
       setText("");
-    }, "Opportunity konnte nicht gespeichert werden");
+    }, "Lead konnte nicht gespeichert werden");
   }
 
   return (
-    <Panel title="Opportunities" sub="Gesprächsnotizen und Chancen zu diesem Kontakt." flush className="overflow-hidden">
+    <Panel title="Leads" sub="Gesprächsnotizen und Chancen zu diesem Kontakt." flush className="overflow-hidden">
       {error && (
         <div className="px-5 pb-4 sm:px-6">
           <ErrorNote>{error}</ErrorNote>
         </div>
       )}
       {opportunities.length === 0 ? (
-        <p className="px-5 pb-5 text-muted sm:px-6">Noch keine Opportunities erfasst.</p>
+        <p className="px-5 pb-5 text-muted sm:px-6">Noch keine Leads erfasst.</p>
       ) : (
         <ul className="border-t border-border">
           {opportunities.map((opportunity) => (
@@ -86,9 +86,9 @@ export function Opportunities({ contact }: { contact: Contact }) {
               <button
                 type="button"
                 disabled={busy}
-                aria-label="Opportunity löschen"
+                aria-label="Lead löschen"
                 onClick={() => {
-                  if (window.confirm("Diese Opportunity wirklich löschen?")) {
+                  if (window.confirm("Diesen Lead wirklich löschen?")) {
                     void run(() => deleteOpportunity(opportunity.id), "Löschen fehlgeschlagen");
                   }
                 }}
@@ -102,7 +102,7 @@ export function Opportunities({ contact }: { contact: Contact }) {
       )}
       <form onSubmit={handleAdd} className="flex flex-col gap-2 border-t border-border bg-page px-5 py-4 sm:px-6">
         <label htmlFor="new-opportunity" className="text-[13px] text-muted">
-          Neue Opportunity
+          Neuer Lead
         </label>
         <textarea
           id="new-opportunity"
@@ -140,7 +140,7 @@ export function Opportunities({ contact }: { contact: Contact }) {
             </button>
             <button type="submit" disabled={busy || listening || text.trim() === ""} className={buttonClass("secondary")}>
               <Plus aria-hidden="true" />
-              Opportunity hinzufügen
+              Lead hinzufügen
             </button>
           </div>
         </div>
@@ -155,7 +155,7 @@ export function AbacusRelease({ contact }: { contact: Contact }) {
   const status = contact.abacusStatus;
 
   return (
-    <Panel title="ERP-Import (Abacus)" variant="rail">
+    <Panel title="CRM-Import" variant="rail">
       <div className="flex flex-col gap-3">
         {error && <ErrorNote>{error}</ErrorNote>}
         <p className="flex flex-wrap items-center gap-2">
@@ -169,10 +169,10 @@ export function AbacusRelease({ contact }: { contact: Contact }) {
           )}
         </p>
         <p className="text-xs text-muted">
-          {status === "None" && "Nur freigegebene Kontakte werden nach Abacus übernommen."}
-          {status === "ToImport" && "Der Kontakt wird beim nächsten Lauf des Imports nach Abacus übernommen."}
+          {status === "None" && "Nur freigegebene Kontakte werden ins CRM übernommen."}
+          {status === "ToImport" && "Der Kontakt wird beim nächsten Lauf des Imports ins CRM übernommen."}
           {status === "Imported" &&
-            "Der Import hat den Kontakt nach Abacus übernommen. Eine erneute Freigabe überträgt ihn noch einmal."}
+            "Der Import hat den Kontakt ins CRM übernommen. Eine erneute Freigabe überträgt ihn noch einmal."}
         </p>
         <button
           type="button"
@@ -185,7 +185,7 @@ export function AbacusRelease({ contact }: { contact: Contact }) {
           }
           className={`${buttonClass("secondary")} w-full`}
         >
-          {status === "None" && "Für Abacus freigeben"}
+          {status === "None" && "Für CRM freigeben"}
           {status === "ToImport" && "Freigabe zurücknehmen"}
           {status === "Imported" && "Erneut freigeben"}
         </button>

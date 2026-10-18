@@ -72,8 +72,8 @@ async function Overview() {
 
       <div className="grid grid-cols-1 gap-5 sm:grid-cols-3">
         <KpiTile label="Kontakte" value={total} meta={`Kontakte ${scope}`} href="/kontakte" />
-        <KpiTile label="Für Abacus freigegeben" value={toImport} meta="werden beim nächsten Import übernommen" />
-        <KpiTile label="Nach Abacus übernommen" value={imported} meta="vom Import bereits übertragen" />
+        <KpiTile label="Für CRM freigegeben" value={toImport} meta="werden beim nächsten Import übernommen" />
+        <KpiTile label="Ins CRM übernommen" value={imported} meta="vom Import bereits übertragen" />
       </div>
 
       <Panel
@@ -111,7 +111,7 @@ async function Overview() {
                   {contact.abacusStatus !== "None" && (
                     <span className="hidden sm:inline">
                       <Badge tone={contact.abacusStatus === "ToImport" ? "warning" : "success"}>
-                        Abacus: {abacusStatusLabels[contact.abacusStatus]}
+                        CRM: {abacusStatusLabels[contact.abacusStatus]}
                       </Badge>
                     </span>
                   )}

@@ -68,7 +68,7 @@ export function ContactDetail({ contact }: { contact: Contact }) {
             {lead}
             {contact.abacusStatus !== "None" && (
               <Badge tone={contact.abacusStatus === "ToImport" ? "warning" : "success"}>
-                Abacus: {abacusStatusLabels[contact.abacusStatus]}
+                CRM: {abacusStatusLabels[contact.abacusStatus]}
               </Badge>
             )}
           </span>

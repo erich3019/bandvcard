@@ -93,7 +93,7 @@ async function ContactList({ searchParams }: { searchParams: SearchParams }) {
                   Ort
                 </th>
                 <th scope="col" className={`${captionCaps} py-2.5 pr-4 pl-3 font-medium sm:pr-6`}>
-                  Abacus
+                  CRM
                 </th>
               </tr>
             </thead>
