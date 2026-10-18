@@ -1,0 +1,127 @@
+/* Designguide: Einbindung in Tailwind CSS 4.
+ *
+ *   @import 'tailwindcss';
+ *   @import '<pfad>/guidelines/css/tokens.css';
+ *   @import '<pfad>/guidelines/css/profiles/<profil>.css';
+ *   @import '<pfad>/guidelines/css/tailwind-theme.css';
+ *
+ * Klassen heissen wie die Tokens: bg-surface, text-muted, border-border, bg-action text-on-action,
+ * outline-focus-ring. Die Tailwind-Standardpalette bleibt verfügbar, wird in Komponenten aber nicht
+ * verwendet (siehe README, «Umsetzung»). Wer sie ganz abschalten will, setzt `--color-*: initial;`
+ * als erste Zeile in den @theme-Block.
+ *
+ * Generiert aus tokens.json (Farbnamen); Radien, Schrift und Varianten sind von Hand gepflegt.
+ */
+
+/* Dunkel: explizit über data-theme="dark" oder per Systemeinstellung, solange kein Theme gewählt ist. */
+@custom-variant dark (&:where([data-theme='dark'], [data-theme='dark'] *));
+
+@theme inline {
+  --font-sans: var(--ds-font-sans);
+  --font-mono: var(--ds-font-mono);
+
+  --color-page: var(--ds-page);
+  --color-surface: var(--ds-surface);
+  --color-column: var(--ds-column);
+  --color-ink: var(--ds-ink);
+  --color-ink-secondary: var(--ds-ink-secondary);
+  --color-ink-tertiary: var(--ds-ink-tertiary);
+  --color-muted: var(--ds-muted);
+  --color-subtle: var(--ds-subtle);
+  --color-border: var(--ds-border);
+  --color-border-strong: var(--ds-border-strong);
+  --color-input: var(--ds-input);
+  --color-divider: var(--ds-divider);
+  --color-logo-bg: var(--ds-logo-bg);
+  --color-sidebar-ink-strong: var(--ds-sidebar-ink-strong);
+  --color-sidebar-ink: var(--ds-sidebar-ink);
+  --color-sidebar-ink-muted: var(--ds-sidebar-ink-muted);
+  --color-sidebar-hover: var(--ds-sidebar-hover);
+  --color-sidebar-active: var(--ds-sidebar-active);
+  --color-sidebar-card: var(--ds-sidebar-card);
+  --color-success: var(--ds-success);
+  --color-success-strong: var(--ds-success-strong);
+  --color-success-bg: var(--ds-success-bg);
+  --color-info: var(--ds-info);
+  --color-info-bg: var(--ds-info-bg);
+  --color-warning: var(--ds-warning);
+  --color-warning-strong: var(--ds-warning-strong);
+  --color-warning-bg: var(--ds-warning-bg);
+  --color-danger: var(--ds-danger);
+  --color-on-danger: var(--ds-on-danger);
+  --color-danger-bg: var(--ds-danger-bg);
+  --color-attention: var(--ds-attention);
+  --color-attention-bg: var(--ds-attention-bg);
+  --color-avatar-blue-bg: var(--ds-avatar-blue-bg);
+  --color-avatar-green-bg: var(--ds-avatar-green-bg);
+  --color-avatar-amber-bg: var(--ds-avatar-amber-bg);
+  --color-avatar-orange-bg: var(--ds-avatar-orange-bg);
+  --color-avatar-pink-bg: var(--ds-avatar-pink-bg);
+  --color-avatar-pink: var(--ds-avatar-pink);
+  --color-avatar-indigo-bg: var(--ds-avatar-indigo-bg);
+  --color-avatar-indigo: var(--ds-avatar-indigo);
+  --color-primary: var(--ds-primary);
+  --color-on-primary: var(--ds-on-primary);
+  --color-sidebar-bg: var(--ds-sidebar-bg);
+  --color-sidebar-border: var(--ds-sidebar-border);
+  --color-sidebar-marker: var(--ds-sidebar-marker);
+  --color-marker: var(--ds-marker);
+  --color-action: var(--ds-action);
+  --color-action-hover: var(--ds-action-hover);
+  --color-on-action: var(--ds-on-action);
+  --color-focus-ring: var(--ds-focus-ring);
+  --color-primary-tint-03: var(--ds-primary-tint-03);
+  --color-primary-tint-04: var(--ds-primary-tint-04);
+  --color-primary-tint-07: var(--ds-primary-tint-07);
+  --color-primary-tint-08: var(--ds-primary-tint-08);
+  --color-primary-tint-10: var(--ds-primary-tint-10);
+  --color-primary-tint-15: var(--ds-primary-tint-15);
+  --color-primary-tint-20: var(--ds-primary-tint-20);
+  --color-marker-tint: var(--ds-marker-tint);
+  --color-status-neutral-bg: var(--ds-status-neutral-bg);
+  --color-chart-previous: var(--ds-chart-previous);
+
+  --radius-xs: var(--ds-radius-xs);
+  --radius-sm: var(--ds-radius-sm);
+  --radius-md: var(--ds-radius-md);
+  --radius-lg: var(--ds-radius-lg);
+
+  --shadow-card-hover: var(--ds-shadow-card-hover);
+}
+
+@layer base {
+  body {
+    background-color: var(--ds-page);
+    color: var(--ds-ink);
+    font-family: var(--ds-font-sans);
+    -webkit-font-smoothing: antialiased;
+  }
+
+  /* Tailwind 4 setzt Rahmen auf currentColor; der Guide verwendet `border`. */
+  *, ::after, ::before, ::backdrop, ::file-selector-button {
+    border-color: var(--ds-border);
+  }
+
+  button:not(:disabled), [role='button']:not(:disabled) {
+    cursor: pointer;
+  }
+
+  /* Sichtbarer Fokus an allen Bedienelementen: 2px, 2px Abstand. */
+  :where(a, button, input, select, textarea, summary, [tabindex]):focus-visible {
+    outline: 2px solid var(--ds-focus-ring);
+    outline-offset: 2px;
+  }
+
+  table {
+    font-variant-numeric: tabular-nums;
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    *, ::before, ::after {
+      animation-duration: 0.01ms !important;
+      animation-iteration-count: 1 !important;
+      transition-duration: 0.01ms !important;
+      scroll-behavior: auto !important;
+    }
+  }
+}

@@ -42,3 +42,6 @@ next-env.d.ts
 
 # copied from node_modules by scripts/copy-tesseract.mjs
 /public/tesseract/
+
+# copied from ../guidelines by scripts/copy-guidelines.mjs
+/src/styles/guidelines/

@@ -1,0 +1,165 @@
+/* Designguide: Basis-Tokens
+   Generiert aus guidelines/tokens.json mit scripts/build-tokens.mjs – nicht von Hand ändern. */
+
+:root {
+  color-scheme: light;
+  --ds-font-sans: Inter, system-ui, sans-serif;
+  --ds-font-mono: ui-monospace, SFMono-Regular, Menlo, monospace;
+  --ds-page: #f8f9fa;
+  --ds-surface: #ffffff;
+  --ds-column: #eef1f4;
+  --ds-ink: #0f172a;
+  --ds-ink-secondary: #334155;
+  --ds-ink-tertiary: #475569;
+  --ds-muted: #5b6b80;
+  --ds-subtle: #94a3b8;
+  --ds-border: #e2e8f0;
+  --ds-border-strong: #cbd5e1;
+  --ds-input: #7f8ea3;
+  --ds-divider: #f1f5f9;
+  --ds-logo-bg: #ffffff;
+  --ds-sidebar-ink-strong: #ffffff;
+  --ds-sidebar-ink: rgba(255,255,255,0.8);
+  --ds-sidebar-ink-muted: rgba(255,255,255,0.7);
+  --ds-sidebar-hover: rgba(255,255,255,0.1);
+  --ds-sidebar-active: rgba(255,255,255,0.14);
+  --ds-sidebar-card: rgba(255,255,255,0.06);
+  --ds-success: #16a34a;
+  --ds-success-strong: #15803d;
+  --ds-success-bg: #f0fdf4;
+  --ds-info: #1d4ed8;
+  --ds-info-bg: #eff6ff;
+  --ds-warning: #d97706;
+  --ds-warning-strong: #b45309;
+  --ds-warning-bg: #fffbeb;
+  --ds-danger: #b91c1c;
+  --ds-on-danger: #ffffff;
+  --ds-danger-bg: #fef2f2;
+  --ds-attention: #c2410c;
+  --ds-attention-bg: #fff7ed;
+  --ds-avatar-blue-bg: #dbeafe;
+  --ds-avatar-green-bg: #dcfce7;
+  --ds-avatar-amber-bg: #fef3c7;
+  --ds-avatar-orange-bg: #ffedd5;
+  --ds-avatar-pink-bg: #fce7f3;
+  --ds-avatar-pink: #be185d;
+  --ds-avatar-indigo-bg: #e0e7ff;
+  --ds-avatar-indigo: #4338ca;
+  --ds-focus-ring: var(--ds-primary);
+  --ds-primary-tint-03: color-mix(in srgb, var(--ds-primary) 3%, transparent);
+  --ds-primary-tint-04: color-mix(in srgb, var(--ds-primary) 4%, transparent);
+  --ds-primary-tint-07: color-mix(in srgb, var(--ds-primary) 7%, transparent);
+  --ds-primary-tint-08: color-mix(in srgb, var(--ds-primary) 8%, transparent);
+  --ds-primary-tint-10: color-mix(in srgb, var(--ds-primary) 10%, transparent);
+  --ds-primary-tint-15: color-mix(in srgb, var(--ds-primary) 15%, transparent);
+  --ds-primary-tint-20: color-mix(in srgb, var(--ds-primary) 20%, transparent);
+  --ds-marker-tint: color-mix(in srgb, var(--ds-marker) 12%, transparent);
+  --ds-status-neutral-bg: var(--ds-divider);
+  --ds-chart-previous: var(--ds-border-strong);
+  --ds-space-0-5: 2px;
+  --ds-space-1: 4px;
+  --ds-space-1-5: 6px;
+  --ds-space-2: 8px;
+  --ds-space-2-5: 10px;
+  --ds-space-3: 12px;
+  --ds-space-3-5: 14px;
+  --ds-space-4: 16px;
+  --ds-space-5: 20px;
+  --ds-space-6: 24px;
+  --ds-space-7: 28px;
+  --ds-space-8: 32px;
+  --ds-radius-xs: 2px;
+  --ds-radius-sm: 4px;
+  --ds-radius-md: 6px;
+  --ds-radius-lg: 8px;
+  --ds-radius-full: 9999px;
+  --ds-control-sm: 28px;
+  --ds-control-md: 32px;
+  --ds-control-lg: 36px;
+  --ds-topbar-height: 64px;
+  --ds-sidebar-width: 248px;
+  --ds-filter-panel-width: 256px;
+  --ds-field-label-width: 130px;
+  --ds-totals-width: 300px;
+  --ds-shadow-card-hover: 0 2px 8px rgba(15,23,42,0.06);
+}
+
+/* Dunkel: explizit gewählt … */
+[data-theme='dark'] {
+  color-scheme: dark;
+  --ds-page: #0b1220;
+  --ds-surface: #131c2b;
+  --ds-column: #1a2434;
+  --ds-ink: #e6ebf2;
+  --ds-ink-secondary: #c4cdd9;
+  --ds-ink-tertiary: #aab4c3;
+  --ds-muted: #97a3b5;
+  --ds-subtle: #6b7a90;
+  --ds-border: #2a3647;
+  --ds-border-strong: #5b6d86;
+  --ds-input: #5b6d86;
+  --ds-divider: #1e293b;
+  --ds-success: #4ade80;
+  --ds-success-strong: #4ade80;
+  --ds-success-bg: #12301f;
+  --ds-info: #93b4f8;
+  --ds-info-bg: #172540;
+  --ds-warning: #fbbf24;
+  --ds-warning-strong: #fbbf24;
+  --ds-warning-bg: #33270e;
+  --ds-danger: #f87171;
+  --ds-on-danger: #0b1220;
+  --ds-danger-bg: #3a1717;
+  --ds-attention: #fb923c;
+  --ds-attention-bg: #36200f;
+  --ds-avatar-blue-bg: #1e3a6e;
+  --ds-avatar-green-bg: #14532d;
+  --ds-avatar-amber-bg: #422d0b;
+  --ds-avatar-orange-bg: #43230e;
+  --ds-avatar-pink-bg: #4a1d36;
+  --ds-avatar-pink: #f9a8d4;
+  --ds-avatar-indigo-bg: #2e2a6b;
+  --ds-avatar-indigo: #a5b4fc;
+  --ds-shadow-card-hover: 0 2px 8px rgba(0,0,0,0.4);
+}
+
+/* … oder Systemeinstellung, solange kein Theme gewählt ist. */
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme='light']) {
+    color-scheme: dark;
+    --ds-page: #0b1220;
+    --ds-surface: #131c2b;
+    --ds-column: #1a2434;
+    --ds-ink: #e6ebf2;
+    --ds-ink-secondary: #c4cdd9;
+    --ds-ink-tertiary: #aab4c3;
+    --ds-muted: #97a3b5;
+    --ds-subtle: #6b7a90;
+    --ds-border: #2a3647;
+    --ds-border-strong: #5b6d86;
+    --ds-input: #5b6d86;
+    --ds-divider: #1e293b;
+    --ds-success: #4ade80;
+    --ds-success-strong: #4ade80;
+    --ds-success-bg: #12301f;
+    --ds-info: #93b4f8;
+    --ds-info-bg: #172540;
+    --ds-warning: #fbbf24;
+    --ds-warning-strong: #fbbf24;
+    --ds-warning-bg: #33270e;
+    --ds-danger: #f87171;
+    --ds-on-danger: #0b1220;
+    --ds-danger-bg: #3a1717;
+    --ds-attention: #fb923c;
+    --ds-attention-bg: #36200f;
+    --ds-avatar-blue-bg: #1e3a6e;
+    --ds-avatar-green-bg: #14532d;
+    --ds-avatar-amber-bg: #422d0b;
+    --ds-avatar-orange-bg: #43230e;
+    --ds-avatar-pink-bg: #4a1d36;
+    --ds-avatar-pink: #f9a8d4;
+    --ds-avatar-indigo-bg: #2e2a6b;
+    --ds-avatar-indigo: #a5b4fc;
+    --ds-shadow-card-hover: 0 2px 8px rgba(0,0,0,0.4);
+  }
+}

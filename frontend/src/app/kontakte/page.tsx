@@ -1,7 +1,9 @@
+import { ChevronLeft, ChevronRight, ScanLine, Search } from "lucide-react";
 import type { Metadata } from "next";
 import Link from "next/link";
 import { Suspense } from "react";
 import { PageShell } from "@/components/page-shell";
+import { Badge, buttonClass, captionCaps, inputClass, PageHeader, Panel } from "@/components/ui";
 import { backendFetch } from "@/lib/backend";
 import {
   abacusStatusLabels,
@@ -10,6 +12,7 @@ import {
   contactListQuery,
   displayName,
 } from "@/lib/contacts";
+import { formatNumber } from "@/lib/format";
 
 export const metadata: Metadata = { title: "Kontakte – bandvcard" };
 
@@ -40,101 +43,151 @@ async function ContactList({ searchParams }: { searchParams: SearchParams }) {
   const total = data["@odata.count"];
   const pages = Math.max(1, Math.ceil(total / CONTACTS_PAGE_SIZE));
 
+  const first = total === 0 ? 0 : (page - 1) * CONTACTS_PAGE_SIZE + 1;
+  const last = Math.min(total, page * CONTACTS_PAGE_SIZE);
+
   return (
-    <>
+    <Panel flush className="overflow-hidden">
       {/* A plain GET form: the search text lives in the URL, so results can be bookmarked. */}
-      <form action="/kontakte" className="flex gap-3">
-        <input
-          type="search"
-          name="q"
-          defaultValue={search}
-          placeholder="Name, Firma, Ort oder E-Mail"
-          aria-label="Kontakte durchsuchen"
-          className="min-w-0 flex-1 rounded-lg border border-black/15 bg-white px-3 py-2 dark:border-white/20 dark:bg-zinc-900"
-        />
-        <button type="submit" className="rounded-full bg-foreground px-5 font-medium text-background">
+      <form action="/kontakte" className="flex flex-wrap items-center gap-3 border-b border-border px-4 py-3">
+        <div className="relative min-w-0 flex-1 sm:max-w-sm">
+          <Search aria-hidden="true" className="pointer-events-none absolute top-1/2 left-3 size-3.5 -translate-y-1/2 text-subtle" />
+          <input
+            type="search"
+            name="q"
+            defaultValue={search}
+            placeholder="Name, Firma, Ort oder E-Mail"
+            aria-label="Kontakte durchsuchen"
+            className={`${inputClass} pl-9`}
+          />
+        </div>
+        <button type="submit" className={buttonClass("secondary")}>
           Suchen
         </button>
+        {search && (
+          <Link href="/kontakte" className="text-[13px] font-medium text-primary hover:underline">
+            Suche zurücksetzen
+          </Link>
+        )}
       </form>
 
-      <p className="text-sm text-zinc-600 dark:text-zinc-400">
-        {total === 1 ? "1 Kontakt" : `${total} Kontakte`}
-        {search && (
-          <>
-            {" "}
-            für „{search}“ ·{" "}
-            <Link href="/kontakte" className="underline">
-              Suche zurücksetzen
-            </Link>
-          </>
-        )}
-      </p>
-
       {data.value.length === 0 ? (
-        <p>
-          {search ? "Keine Kontakte gefunden." : "Noch keine Kontakte vorhanden."}{" "}
-          <Link href="/erfassen" className="underline">
+        <p className="px-6 py-8 text-muted">
+          {search ? `Keine Kontakte für «${search}» gefunden.` : "Noch keine Kontakte vorhanden."}{" "}
+          <Link href="/erfassen" className="font-medium text-primary hover:underline">
             Visitenkarte erfassen
           </Link>
         </p>
       ) : (
-        <ul className="divide-y divide-black/10 rounded-lg border border-black/10 dark:divide-white/15 dark:border-white/15">
-          {data.value.map((contact) => (
-            <li key={contact.id}>
-              <Link href={`/kontakte/${contact.id}`} className="block px-4 py-3 hover:bg-black/5 dark:hover:bg-white/10">
-                <span className="font-medium">{displayName(contact)}</span>
-                {contact.abacusStatus !== "None" && (
-                  <span
-                    className={`ml-2 rounded-full px-2 py-0.5 text-xs ${
-                      contact.abacusStatus === "ToImport"
-                        ? "bg-amber-100 text-amber-900 dark:bg-amber-900 dark:text-amber-100"
-                        : "bg-emerald-100 text-emerald-900 dark:bg-emerald-900 dark:text-emerald-100"
-                    }`}
-                  >
-                    Abacus: {abacusStatusLabels[contact.abacusStatus]}
-                  </span>
-                )}
-                <span className="block text-sm text-zinc-600 dark:text-zinc-400">
-                  {[contact.function, contact.companyName, contact.city].filter(Boolean).join(" · ")}
-                </span>
-                <span className="block text-sm text-zinc-600 dark:text-zinc-400">
-                  {[contact.email, contact.phone, contact.mobile].filter(Boolean).join(" · ")}
-                </span>
-              </Link>
-            </li>
-          ))}
-        </ul>
+        <div className="overflow-x-auto">
+          <table className="w-full border-collapse text-[13px]">
+            <thead>
+              <tr className="border-b border-border bg-page text-left">
+                <th scope="col" className={`${captionCaps} py-2.5 pr-3 pl-4 font-medium sm:pl-6`}>
+                  Name
+                </th>
+                <th scope="col" className={`${captionCaps} hidden px-3 py-2.5 font-medium md:table-cell`}>
+                  Firma
+                </th>
+                <th scope="col" className={`${captionCaps} hidden px-3 py-2.5 font-medium lg:table-cell`}>
+                  Ort
+                </th>
+                <th scope="col" className={`${captionCaps} py-2.5 pr-4 pl-3 font-medium sm:pr-6`}>
+                  Abacus
+                </th>
+              </tr>
+            </thead>
+            <tbody>
+              {data.value.map((contact) => (
+                // The name link stretches over the whole row, so the row is one target.
+                <tr key={contact.id} className="relative border-b border-divider last:border-b-0 hover:bg-page">
+                  <td className="py-3 pr-3 pl-4 sm:pl-6">
+                    <Link
+                      href={`/kontakte/${contact.id}`}
+                      className="font-medium text-ink after:absolute after:inset-0 focus-visible:outline-none focus-visible:after:outline-2 focus-visible:after:-outline-offset-2 focus-visible:after:outline-focus-ring"
+                    >
+                      {displayName(contact)}
+                    </Link>
+                    <span className="block text-xs text-muted">
+                      <span className="md:hidden">
+                        {[contact.function, contact.companyName].filter(Boolean).join(" · ")}
+                      </span>
+                      <span className="hidden md:inline">{contact.function}</span>
+                    </span>
+                  </td>
+                  <td className="hidden px-3 py-3 text-ink-secondary md:table-cell">{contact.companyName}</td>
+                  <td className="hidden px-3 py-3 text-ink-secondary lg:table-cell">{contact.city}</td>
+                  <td className="py-3 pr-4 pl-3 sm:pr-6">
+                    {contact.abacusStatus === "None" ? (
+                      <span className="text-muted">–</span>
+                    ) : (
+                      <Badge tone={contact.abacusStatus === "ToImport" ? "warning" : "success"}>
+                        {abacusStatusLabels[contact.abacusStatus]}
+                      </Badge>
+                    )}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
       )}
 
-      {pages > 1 && (
-        <nav aria-label="Seiten" className="flex items-center justify-between text-sm">
-          {page > 1 ? (
-            <Link href={pageHref(search, page - 1)} className="underline">
-              Zurück
-            </Link>
-          ) : (
-            <span />
-          )}
-          <span>
-            Seite {page} von {pages}
+      <nav
+        aria-label="Seiten"
+        className="flex items-center justify-between gap-3 border-t border-border px-4 py-3 text-xs text-muted"
+      >
+        <span className="tabular-nums">
+          {total === 0 ? "0 Kontakte" : `${first}–${last} von ${formatNumber(total)}`}
+        </span>
+        {pages > 1 && (
+          <span className="flex items-center gap-1">
+            {page > 1 ? (
+              <Link href={pageHref(search, page - 1)} className={buttonClass("secondary", "md")}>
+                <ChevronLeft aria-hidden="true" />
+                Zurück
+              </Link>
+            ) : (
+              <span aria-disabled="true" className={buttonClass("secondary", "md")}>
+                <ChevronLeft aria-hidden="true" />
+                Zurück
+              </span>
+            )}
+            <span className="px-2 tabular-nums">
+              Seite {page} von {pages}
+            </span>
+            {page < pages ? (
+              <Link href={pageHref(search, page + 1)} className={buttonClass("secondary", "md")}>
+                Weiter
+                <ChevronRight aria-hidden="true" />
+              </Link>
+            ) : (
+              <span aria-disabled="true" className={buttonClass("secondary", "md")}>
+                Weiter
+                <ChevronRight aria-hidden="true" />
+              </span>
+            )}
           </span>
-          {page < pages ? (
-            <Link href={pageHref(search, page + 1)} className="underline">
-              Weiter
-            </Link>
-          ) : (
-            <span />
-          )}
-        </nav>
-      )}
-    </>
+        )}
+      </nav>
+    </Panel>
   );
 }
 
 export default function ContactsPage({ searchParams }: { searchParams: SearchParams }) {
   return (
-    <PageShell title="Kontakte">
-      <Suspense fallback={<p className="text-zinc-600 dark:text-zinc-400">Lädt …</p>}>
+    <PageShell crumbs={[{ label: "Start", href: "/" }, { label: "Kontakte" }]}>
+      <PageHeader
+        title="Kontakte"
+        lead="Kontakte aus erfassten Visitenkarten, sortiert nach Nachname."
+        actions={
+          <Link href="/erfassen" className={buttonClass("primary")}>
+            <ScanLine aria-hidden="true" />
+            Visitenkarte erfassen
+          </Link>
+        }
+      />
+      <Suspense fallback={<p className="text-muted">Lädt …</p>}>
         <ContactList searchParams={searchParams} />
       </Suspense>
     </PageShell>

@@ -1,17 +1,14 @@
 "use client";
 
+import { Pencil, Trash2 } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
 import { ContactFields, contactFieldLabels } from "@/components/contact-fields";
+import { Badge, buttonClass, ErrorNote, PageHeader, Panel } from "@/components/ui";
 import { deleteContact, SessionExpiredError, updateContact } from "@/lib/api";
-import { type Contact, displayName, toCardFields } from "@/lib/contacts";
-
-// Fixed time zone, so server and browser render the same text.
-const dateTime = new Intl.DateTimeFormat("de-DE", {
-  dateStyle: "medium",
-  timeStyle: "short",
-  timeZone: "Europe/Berlin",
-});
+import { abacusStatusLabels, type Contact, displayName, toCardFields } from "@/lib/contacts";
+import { formatDateTime } from "@/lib/format";
+import { AbacusRelease, Opportunities } from "./contact-extras";
 
 const links: Partial<Record<string, string>> = { email: "mailto:", phone: "tel:", mobile: "tel:" };
 
@@ -49,7 +46,7 @@ export function ContactDetail({ contact }: { contact: Contact }) {
   }
 
   function handleDelete() {
-    if (!window.confirm(`Kontakt „${displayName(contact)}“ wirklich löschen?`)) {
+    if (!window.confirm(`Kontakt «${displayName(contact)}» wirklich löschen?`)) {
       return;
     }
     void run(async () => {
@@ -59,32 +56,49 @@ export function ContactDetail({ contact }: { contact: Contact }) {
     }, "Löschen fehlgeschlagen");
   }
 
-  const alert = error && (
-    <p role="alert" className="rounded-lg bg-red-50 p-3 text-sm text-red-800 dark:bg-red-950 dark:text-red-200">
-      {error}
-    </p>
+  const name = displayName(contact);
+  const lead = [contact.function, contact.companyName].filter(Boolean).join(" · ");
+
+  const header = (
+    <PageHeader
+      title={name}
+      lead={
+        (lead || contact.abacusStatus !== "None") && (
+          <span className="flex flex-wrap items-center gap-2">
+            {lead}
+            {contact.abacusStatus !== "None" && (
+              <Badge tone={contact.abacusStatus === "ToImport" ? "warning" : "success"}>
+                Abacus: {abacusStatusLabels[contact.abacusStatus]}
+              </Badge>
+            )}
+          </span>
+        )
+      }
+      actions={
+        !editing && (
+          <>
+            <button type="button" disabled={busy} onClick={() => setEditing(true)} className={buttonClass("primary")}>
+              <Pencil aria-hidden="true" />
+              Kontakt bearbeiten
+            </button>
+            <span aria-hidden="true" className="mx-1 h-6 w-px bg-border" />
+            <button type="button" disabled={busy} onClick={handleDelete} className={buttonClass("danger")}>
+              <Trash2 aria-hidden="true" />
+              {busy ? "Löscht …" : "Löschen"}
+            </button>
+          </>
+        )
+      }
+    />
   );
 
-  const photo = contact.photoLink && (
-    <a href={contact.photoLink} target="_blank" rel="noreferrer">
-      {/* eslint-disable-next-line @next/next/no-img-element -- served by the backend behind the login */}
-      <img src={contact.photoLink} alt="Foto der Visitenkarte" className="max-h-72 w-full rounded-lg object-contain" />
-    </a>
-  );
-
-  if (editing) {
-    return (
+  const details = editing ? (
+    <Panel title="Kontaktangaben bearbeiten">
       <form onSubmit={handleSave} className="flex flex-col gap-6">
-        {alert}
-        {photo}
         <ContactFields fields={fields} disabled={busy} onChange={setFields} />
-        <div className="flex flex-wrap gap-4">
-          <button
-            type="submit"
-            disabled={busy}
-            className="h-12 rounded-full bg-foreground px-6 font-medium text-background disabled:opacity-50"
-          >
-            {busy ? "Speichert …" : "Speichern"}
+        <div className="flex flex-wrap gap-2 border-t border-divider pt-5">
+          <button type="submit" disabled={busy} className={buttonClass("primary")}>
+            {busy ? "Speichert …" : "Änderungen speichern"}
           </button>
           <button
             type="button"
@@ -94,32 +108,30 @@ export function ContactDetail({ contact }: { contact: Contact }) {
               setError(null);
               setEditing(false);
             }}
-            className="h-12 rounded-full border border-black/10 px-6 dark:border-white/20"
+            className={buttonClass("secondary")}
           >
             Abbrechen
           </button>
         </div>
       </form>
-    );
-  }
-
-  return (
-    <div className="flex flex-col gap-6">
-      {alert}
-      <h2 className="text-xl font-semibold">{displayName(contact)}</h2>
-      {photo}
-      <dl className="grid grid-cols-1 gap-x-6 gap-y-3 sm:grid-cols-[max-content_1fr]">
-        {contactFieldLabels.map(({ name, label }) => {
-          const value = contact[name];
-          const prefix = links[name];
+    </Panel>
+  ) : (
+    <Panel title="Kontaktangaben">
+      <dl className="grid grid-cols-1 gap-x-10 gap-y-3 sm:grid-cols-2">
+        {contactFieldLabels.map(({ name: field, label, wide }) => {
+          const value = contact[field];
+          const prefix = links[field];
           return (
-            <div key={name} className="contents">
-              <dt className="text-sm text-zinc-600 dark:text-zinc-400">{label}</dt>
-              <dd>
+            <div
+              key={field}
+              className={`grid grid-cols-[110px_1fr] items-baseline gap-3 sm:grid-cols-[130px_1fr] ${wide ? "sm:col-span-2" : ""}`}
+            >
+              <dt className="text-muted">{label}</dt>
+              <dd className="min-w-0 break-words">
                 {!value ? (
-                  <span className="text-zinc-400">–</span>
+                  <span className="text-subtle">–</span>
                 ) : prefix ? (
-                  <a href={`${prefix}${value}`} className="underline">
+                  <a href={`${prefix}${value}`} className="font-medium text-primary hover:underline">
                     {value}
                   </a>
                 ) : (
@@ -130,29 +142,50 @@ export function ContactDetail({ contact }: { contact: Contact }) {
           );
         })}
       </dl>
-      <p className="text-sm text-zinc-600 dark:text-zinc-400">
-        Erfasst am {dateTime.format(new Date(contact.createdAt))} von {contact.createdBy}
-        <br />
-        Zuletzt geändert am {dateTime.format(new Date(contact.updatedAt))} von {contact.updatedBy}
-      </p>
-      <div className="flex flex-wrap gap-4">
-        <button
-          type="button"
-          disabled={busy}
-          onClick={() => setEditing(true)}
-          className="h-12 rounded-full bg-foreground px-6 font-medium text-background disabled:opacity-50"
-        >
-          Bearbeiten
-        </button>
-        <button
-          type="button"
-          disabled={busy}
-          onClick={handleDelete}
-          className="h-12 rounded-full border border-red-700/40 px-6 text-red-800 disabled:opacity-50 dark:text-red-300"
-        >
-          {busy ? "Löscht …" : "Löschen"}
-        </button>
+    </Panel>
+  );
+
+  return (
+    <>
+      {header}
+      {error && <ErrorNote>{error}</ErrorNote>}
+      <div className="grid grid-cols-1 gap-5 xl:grid-cols-12">
+        <div className="flex min-w-0 flex-col gap-5 xl:col-span-8">
+          {details}
+          <Opportunities contact={contact} />
+        </div>
+        <div className="flex min-w-0 flex-col gap-5 xl:col-span-4">
+          {contact.photoLink && (
+            <Panel title="Visitenkarte" variant="rail">
+              <a href={contact.photoLink} target="_blank" rel="noreferrer" aria-label="Foto in voller Grösse öffnen">
+                {/* eslint-disable-next-line @next/next/no-img-element -- served by the backend behind the login */}
+                <img
+                  src={contact.photoLink}
+                  alt="Foto der Visitenkarte"
+                  className="max-h-72 w-full rounded-md border border-border object-contain"
+                />
+              </a>
+            </Panel>
+          )}
+          <AbacusRelease contact={contact} />
+          <Panel title="Verlauf" variant="rail">
+            <ul className="flex flex-col gap-3 text-[13px]">
+              <li>
+                <span className="block font-medium">Erfasst</span>
+                <span className="block text-xs text-muted">
+                  {formatDateTime(new Date(contact.createdAt))} · {contact.createdBy}
+                </span>
+              </li>
+              <li>
+                <span className="block font-medium">Zuletzt geändert</span>
+                <span className="block text-xs text-muted">
+                  {formatDateTime(new Date(contact.updatedAt))} · {contact.updatedBy}
+                </span>
+              </li>
+            </ul>
+          </Panel>
+        </div>
       </div>
-    </div>
+    </>
   );
 }

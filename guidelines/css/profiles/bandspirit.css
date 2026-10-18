@@ -1,0 +1,44 @@
+/* Designguide: Profil «BANDspirit (Petrol)». Markenfarbe Petrol. Die Sidebar ist dunkler als `primary`, weil 70 % Weiss auf #2a6b64 nur 3.1:1 erreicht.
+   Generiert aus guidelines/tokens.json mit scripts/build-tokens.mjs – nicht von Hand ändern. */
+
+:root {
+  --ds-primary: #2a6b64;
+  --ds-on-primary: #ffffff;
+  --ds-sidebar-bg: #1c4d48;
+  --ds-sidebar-border: transparent;
+  --ds-sidebar-marker: #f6a865;
+  --ds-marker: #d9731c;
+  --ds-action: #b35f12;
+  --ds-action-hover: #9a500f;
+  --ds-on-action: #ffffff;
+}
+
+/* Dunkel: explizit gewählt … */
+[data-theme='dark'] {
+  color-scheme: dark;
+  --ds-primary: #7cc4ba;
+  --ds-on-primary: #0b1220;
+  --ds-sidebar-bg: #10302d;
+  --ds-sidebar-border: #2a3647;
+  --ds-sidebar-marker: #f6a865;
+  --ds-marker: #f39a4e;
+  --ds-action: #f39a4e;
+  --ds-action-hover: #e0843a;
+  --ds-on-action: #1c1206;
+}
+
+/* … oder Systemeinstellung, solange kein Theme gewählt ist. */
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme='light']) {
+    color-scheme: dark;
+    --ds-primary: #7cc4ba;
+    --ds-on-primary: #0b1220;
+    --ds-sidebar-bg: #10302d;
+    --ds-sidebar-border: #2a3647;
+    --ds-sidebar-marker: #f6a865;
+    --ds-marker: #f39a4e;
+    --ds-action: #f39a4e;
+    --ds-action-hover: #e0843a;
+    --ds-on-action: #1c1206;
+  }
+}

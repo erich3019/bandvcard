@@ -1,46 +1,26 @@
 "use client";
 
+import { Mic, MicOff, Plus, Trash2 } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
+import { Badge, buttonClass, ErrorNote, inputClass, Panel } from "@/components/ui";
 import { createOpportunity, deleteOpportunity, SessionExpiredError, setAbacusStatus } from "@/lib/api";
 import { abacusStatusLabels, type Contact, OPPORTUNITY_MAX_LENGTH } from "@/lib/contacts";
 import { appendDictation } from "@/lib/dictation";
+import { formatDate, formatDateTime } from "@/lib/format";
 import { useDictation } from "@/lib/use-dictation";
 
-// Fixed time zone, so server and browser render the same text.
-const date = new Intl.DateTimeFormat("de-DE", { dateStyle: "medium", timeZone: "Europe/Berlin" });
-const dateTime = new Intl.DateTimeFormat("de-DE", {
-  dateStyle: "medium",
-  timeStyle: "short",
-  timeZone: "Europe/Berlin",
-});
-
-// What belongs to a contact beyond the card data: its opportunities and the release for Abacus.
-export function ContactExtras({ contact }: { contact: Contact }) {
+// Runs a change against the API, then reloads the server-rendered contact.
+function useAction() {
   const router = useRouter();
-  const [text, setText] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const dictation = useDictation(setError);
-  const { listening, interim } = dictation;
-  const opportunities = contact.opportunities ?? [];
-  const status = contact.abacusStatus;
-
-  function toggleDictation() {
-    if (listening) {
-      dictation.stop();
-      return;
-    }
-    setError(null);
-    dictation.start((spoken) => setText((current) => appendDictation(current, spoken, OPPORTUNITY_MAX_LENGTH)));
-  }
 
   async function run(action: () => Promise<void>, failure: string) {
     setError(null);
     setBusy(true);
     try {
       await action();
-      // Reloads the server-rendered contact with its opportunities and status.
       router.refresh();
     } catch (actionError) {
       if (actionError instanceof SessionExpiredError) {
@@ -53,6 +33,26 @@ export function ContactExtras({ contact }: { contact: Contact }) {
     }
   }
 
+  return { busy, error, setError, run };
+}
+
+// What belongs to a contact beyond the card data: its opportunities …
+export function Opportunities({ contact }: { contact: Contact }) {
+  const [text, setText] = useState("");
+  const { busy, error, setError, run } = useAction();
+  const dictation = useDictation(setError);
+  const { listening, interim } = dictation;
+  const opportunities = contact.opportunities ?? [];
+
+  function toggleDictation() {
+    if (listening) {
+      dictation.stop();
+      return;
+    }
+    setError(null);
+    dictation.start((spoken) => setText((current) => appendDictation(current, spoken, OPPORTUNITY_MAX_LENGTH)));
+  }
+
   function handleAdd(event: React.FormEvent) {
     event.preventDefault();
     void run(async () => {
@@ -62,132 +62,134 @@ export function ContactExtras({ contact }: { contact: Contact }) {
   }
 
   return (
-    <div className="flex flex-col gap-8 border-t border-black/10 pt-8 dark:border-white/15">
+    <Panel title="Opportunities" sub="Gesprächsnotizen und Chancen zu diesem Kontakt." flush className="overflow-hidden">
       {error && (
-        <p role="alert" className="rounded-lg bg-red-50 p-3 text-sm text-red-800 dark:bg-red-950 dark:text-red-200">
-          {error}
-        </p>
+        <div className="px-5 pb-4 sm:px-6">
+          <ErrorNote>{error}</ErrorNote>
+        </div>
       )}
-
-      <section className="flex flex-col gap-4">
-        <h2 className="text-xl font-semibold">Opportunities</h2>
-        {opportunities.length === 0 ? (
-          <p className="text-sm text-zinc-600 dark:text-zinc-400">Noch keine Opportunities erfasst.</p>
-        ) : (
-          <ul className="divide-y divide-black/10 rounded-lg border border-black/10 dark:divide-white/15 dark:border-white/15">
-            {opportunities.map((opportunity) => (
-              <li key={opportunity.id} className="flex items-start gap-4 px-4 py-3">
-                <div className="min-w-0 flex-1">
-                  <p className="break-words">{opportunity.text}</p>
-                  <p className="text-sm text-zinc-600 dark:text-zinc-400">
-                    {date.format(new Date(opportunity.createdAt))} · {opportunity.createdBy}
-                  </p>
-                </div>
-                <button
-                  type="button"
-                  disabled={busy}
-                  onClick={() => {
-                    if (window.confirm("Diese Opportunity wirklich löschen?")) {
-                      void run(() => deleteOpportunity(opportunity.id), "Löschen fehlgeschlagen");
-                    }
-                  }}
-                  className="text-sm text-red-800 underline disabled:opacity-50 dark:text-red-300"
-                >
-                  Löschen
-                </button>
-              </li>
-            ))}
-          </ul>
-        )}
-        <form onSubmit={handleAdd} className="flex flex-col gap-2">
-          <label className="flex flex-col gap-1 text-sm">
-            Neue Opportunity
-            <textarea
-              value={text}
-              maxLength={OPPORTUNITY_MAX_LENGTH}
-              rows={2}
-              required
-              disabled={busy}
-              onChange={(event) => setText(event.target.value)}
-              className="rounded-lg border border-black/15 bg-white px-3 py-2 text-base dark:border-white/20 dark:bg-zinc-900"
-            />
-          </label>
-          {listening && (
-            <p role="status" className="text-sm text-zinc-600 dark:text-zinc-400">
-              {interim ? `… ${interim}` : "Sprechen Sie jetzt …"}
-            </p>
-          )}
-          <div className="flex flex-wrap items-center justify-between gap-4">
-            <span className="text-sm text-zinc-600 dark:text-zinc-400">
-              {text.length} / {OPPORTUNITY_MAX_LENGTH} Zeichen
-            </span>
-            <div className="flex gap-3">
+      {opportunities.length === 0 ? (
+        <p className="px-5 pb-5 text-muted sm:px-6">Noch keine Opportunities erfasst.</p>
+      ) : (
+        <ul className="border-t border-border">
+          {opportunities.map((opportunity) => (
+            <li
+              key={opportunity.id}
+              className="group flex items-start gap-4 border-b border-divider px-5 py-3 last:border-b-0 sm:px-6"
+            >
+              <div className="min-w-0 flex-1">
+                <p className="break-words text-ink-secondary">{opportunity.text}</p>
+                <p className="text-xs text-muted">
+                  {formatDate(new Date(opportunity.createdAt))} · {opportunity.createdBy}
+                </p>
+              </div>
               <button
                 type="button"
-                disabled={busy || (!listening && text.length >= OPPORTUNITY_MAX_LENGTH)}
-                aria-pressed={listening}
-                onClick={toggleDictation}
-                className={
-                  listening
-                    ? "h-10 rounded-full bg-red-700 px-5 font-medium text-white"
-                    : "h-10 rounded-full border border-black/10 px-5 disabled:opacity-50 dark:border-white/20"
-                }
+                disabled={busy}
+                aria-label="Opportunity löschen"
+                onClick={() => {
+                  if (window.confirm("Diese Opportunity wirklich löschen?")) {
+                    void run(() => deleteOpportunity(opportunity.id), "Löschen fehlgeschlagen");
+                  }
+                }}
+                className="inline-flex size-7 shrink-0 items-center justify-center rounded-md text-muted hover:bg-danger-bg hover:text-danger disabled:cursor-not-allowed disabled:opacity-50"
               >
-                {listening ? "Aufnahme beenden" : "Diktieren"}
+                <Trash2 aria-hidden="true" className="size-3.5" />
               </button>
-              <button
-                type="submit"
-                disabled={busy || listening || text.trim() === ""}
-                className="h-10 rounded-full bg-foreground px-5 font-medium text-background disabled:opacity-50"
-              >
-                Hinzufügen
-              </button>
-            </div>
+            </li>
+          ))}
+        </ul>
+      )}
+      <form onSubmit={handleAdd} className="flex flex-col gap-2 border-t border-border bg-page px-5 py-4 sm:px-6">
+        <label htmlFor="new-opportunity" className="text-[13px] text-muted">
+          Neue Opportunity
+        </label>
+        <textarea
+          id="new-opportunity"
+          value={text}
+          maxLength={OPPORTUNITY_MAX_LENGTH}
+          rows={2}
+          required
+          disabled={busy}
+          onChange={(event) => setText(event.target.value)}
+          className={`${inputClass} h-auto py-2 text-base sm:text-[14px]`}
+        />
+        {listening && (
+          <p role="status" className="text-xs text-muted">
+            {interim ? `… ${interim}` : "Sprechen Sie jetzt …"}
+          </p>
+        )}
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <span className="text-xs text-muted tabular-nums">
+            {text.length} / {OPPORTUNITY_MAX_LENGTH} Zeichen
+          </span>
+          <div className="flex gap-2">
+            <button
+              type="button"
+              disabled={busy || (!listening && text.length >= OPPORTUNITY_MAX_LENGTH)}
+              aria-pressed={listening}
+              onClick={toggleDictation}
+              className={
+                listening
+                  ? `${buttonClass("secondary")} border-danger bg-danger text-on-danger hover:bg-danger [&>svg]:text-on-danger`
+                  : buttonClass("secondary")
+              }
+            >
+              {listening ? <MicOff aria-hidden="true" /> : <Mic aria-hidden="true" />}
+              {listening ? "Aufnahme beenden" : "Diktieren"}
+            </button>
+            <button type="submit" disabled={busy || listening || text.trim() === ""} className={buttonClass("secondary")}>
+              <Plus aria-hidden="true" />
+              Opportunity hinzufügen
+            </button>
           </div>
-        </form>
-      </section>
+        </div>
+      </form>
+    </Panel>
+  );
+}
 
-      <section className="flex flex-col gap-4">
-        <h2 className="text-xl font-semibold">ERP-Import (Abacus)</h2>
-        <p>
-          Status:{" "}
+// … and the release for the import into Abacus.
+export function AbacusRelease({ contact }: { contact: Contact }) {
+  const { busy, error, run } = useAction();
+  const status = contact.abacusStatus;
+
+  return (
+    <Panel title="ERP-Import (Abacus)" variant="rail">
+      <div className="flex flex-col gap-3">
+        {error && <ErrorNote>{error}</ErrorNote>}
+        <p className="flex flex-wrap items-center gap-2">
           {status === "None" ? (
-            <span className="text-zinc-600 dark:text-zinc-400">{abacusStatusLabels.None}</span>
+            <Badge>{abacusStatusLabels.None}</Badge>
           ) : (
-            <strong>{abacusStatusLabels[status]}</strong>
+            <Badge tone={status === "ToImport" ? "warning" : "success"}>{abacusStatusLabels[status]}</Badge>
           )}
           {status === "Imported" && contact.abacusImportedAt && (
-            <> am {dateTime.format(new Date(contact.abacusImportedAt))}</>
+            <span className="text-xs text-muted">am {formatDateTime(new Date(contact.abacusImportedAt))}</span>
           )}
         </p>
-        <p className="text-sm text-zinc-600 dark:text-zinc-400">
+        <p className="text-xs text-muted">
           {status === "None" && "Nur freigegebene Kontakte werden nach Abacus übernommen."}
           {status === "ToImport" && "Der Kontakt wird beim nächsten Lauf des Imports nach Abacus übernommen."}
           {status === "Imported" &&
             "Der Import hat den Kontakt nach Abacus übernommen. Eine erneute Freigabe überträgt ihn noch einmal."}
         </p>
-        <div>
-          <button
-            type="button"
-            disabled={busy}
-            onClick={() =>
-              void run(
-                () => setAbacusStatus(contact.id, status === "ToImport" ? "None" : "ToImport"),
-                "Status konnte nicht geändert werden",
-              )
-            }
-            className={
-              status === "None"
-                ? "h-12 rounded-full bg-foreground px-6 font-medium text-background disabled:opacity-50"
-                : "h-12 rounded-full border border-black/10 px-6 disabled:opacity-50 dark:border-white/20"
-            }
-          >
-            {status === "None" && "Für Abacus freigeben"}
-            {status === "ToImport" && "Freigabe zurücknehmen"}
-            {status === "Imported" && "Erneut freigeben"}
-          </button>
-        </div>
-      </section>
-    </div>
+        <button
+          type="button"
+          disabled={busy}
+          onClick={() =>
+            void run(
+              () => setAbacusStatus(contact.id, status === "ToImport" ? "None" : "ToImport"),
+              "Status konnte nicht geändert werden",
+            )
+          }
+          className={`${buttonClass("secondary")} w-full`}
+        >
+          {status === "None" && "Für Abacus freigeben"}
+          {status === "ToImport" && "Freigabe zurücknehmen"}
+          {status === "Imported" && "Erneut freigeben"}
+        </button>
+      </div>
+    </Panel>
   );
 }

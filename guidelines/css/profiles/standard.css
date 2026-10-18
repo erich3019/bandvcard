@@ -1,0 +1,44 @@
+/* Designguide: Profil «Standard (Marineblau)». Ausgangsprofil des Guides, entspricht den ERP-Mockups.
+   Generiert aus guidelines/tokens.json mit scripts/build-tokens.mjs – nicht von Hand ändern. */
+
+:root {
+  --ds-primary: #1e3a5f;
+  --ds-on-primary: #ffffff;
+  --ds-sidebar-bg: #1e3a5f;
+  --ds-sidebar-border: transparent;
+  --ds-sidebar-marker: #f39a4e;
+  --ds-marker: #d9731c;
+  --ds-action: #b35f12;
+  --ds-action-hover: #9a500f;
+  --ds-on-action: #ffffff;
+}
+
+/* Dunkel: explizit gewählt … */
+[data-theme='dark'] {
+  color-scheme: dark;
+  --ds-primary: #8fb3e0;
+  --ds-on-primary: #0b1220;
+  --ds-sidebar-bg: #0e1a2b;
+  --ds-sidebar-border: #2a3647;
+  --ds-sidebar-marker: #f39a4e;
+  --ds-marker: #f39a4e;
+  --ds-action: #f39a4e;
+  --ds-action-hover: #e0843a;
+  --ds-on-action: #1c1206;
+}
+
+/* … oder Systemeinstellung, solange kein Theme gewählt ist. */
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme='light']) {
+    color-scheme: dark;
+    --ds-primary: #8fb3e0;
+    --ds-on-primary: #0b1220;
+    --ds-sidebar-bg: #0e1a2b;
+    --ds-sidebar-border: #2a3647;
+    --ds-sidebar-marker: #f39a4e;
+    --ds-marker: #f39a4e;
+    --ds-action: #f39a4e;
+    --ds-action-hover: #e0843a;
+    --ds-on-action: #1c1206;
+  }
+}

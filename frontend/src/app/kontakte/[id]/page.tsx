@@ -1,12 +1,10 @@
 import type { Metadata } from "next";
-import Link from "next/link";
 import { notFound } from "next/navigation";
 import { Suspense } from "react";
 import { PageShell } from "@/components/page-shell";
 import { backendFetch } from "@/lib/backend";
 import { type Contact, isContactId } from "@/lib/contacts";
 import { ContactDetail } from "./contact-detail";
-import { ContactExtras } from "./contact-extras";
 
 export const metadata: Metadata = { title: "Kontakt – bandvcard" };
 
@@ -26,21 +24,13 @@ async function LoadedContact({ params }: { params: Promise<{ id: string }> }) {
   }
   const contact: Contact = await response.json();
 
-  return (
-    <>
-      <ContactDetail contact={contact} />
-      <ContactExtras contact={contact} />
-    </>
-  );
+  return <ContactDetail contact={contact} />;
 }
 
 export default function ContactPage({ params }: { params: Promise<{ id: string }> }) {
   return (
-    <PageShell title="Kontakt">
-      <Link href="/kontakte" className="-mt-4 text-sm text-zinc-600 underline dark:text-zinc-400">
-        Zur Kontaktliste
-      </Link>
-      <Suspense fallback={<p className="text-zinc-600 dark:text-zinc-400">Lädt …</p>}>
+    <PageShell crumbs={[{ label: "Start", href: "/" }, { label: "Kontakte", href: "/kontakte" }, { label: "Kontakt" }]}>
+      <Suspense fallback={<p className="text-muted">Lädt …</p>}>
         <LoadedContact params={params} />
       </Suspense>
     </PageShell>

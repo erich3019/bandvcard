@@ -20,7 +20,7 @@ npm test                              # vitest
 npx vitest run src/lib/parse-card.test.ts -t "Swiss"   # single file / test name
 ```
 
-`dev` and `build` first run `scripts/copy-tesseract.mjs`, which copies the Tesseract.js worker, WebAssembly cores and language data from `node_modules` into the git-ignored `public/tesseract/`. Read `frontend/AGENTS.md` before writing Next.js code: this Next.js version has breaking changes and ships its docs in `node_modules/next/dist/docs/`.
+`dev` and `build` first run `scripts/copy-tesseract.mjs`, which copies the Tesseract.js worker, WebAssembly cores and language data from `node_modules` into the git-ignored `public/tesseract/`. They also run `scripts/copy-guidelines.mjs`, which copies the design guide's CSS from `guidelines/` into the git-ignored `src/styles/guidelines/` (Turbopack does not load CSS from outside `frontend/`); compose passes `guidelines/` to the frontend image as the additional build context `guidelines`. Read `frontend/AGENTS.md` before writing Next.js code: this Next.js version has breaking changes and ships its docs in `node_modules/next/dist/docs/`.
 
 Backend (run in `backend/`, .NET 10, solution `Bandvcard.slnx`):
 
@@ -147,14 +147,27 @@ Backend side:
 - `/kontakte` (list) and `/kontakte/[id]` (detail) are server-rendered: they call the backend through `lib/backend.ts` `backendFetch()`, which forwards the session cookie and redirects to `/login` on 401. Like `getCurrentUser()` it must run inside a `<Suspense>` boundary, and so must reading `params`/`searchParams`.
 - The list state lives in the URL (`?q=` search text, `?seite=` page), the search is a plain GET form. `lib/contacts.ts` builds the OData query (`contactListQuery`, 25 per page, case-insensitive search over name, company, city and email) and holds the `Contact` types; it is shared by server and client code, so keep it free of server-only imports.
 - Editing and deleting happen in the client component `kontakte/[id]/contact-detail.tsx` through `lib/api.ts` (browser `fetch` to `/api`), followed by `router.refresh()`.
-- `components/contact-fields.tsx` is the one definition of the contact form fields and their German labels, used by capture, edit and the detail view; add a new contact field there (and in `CardFields`). `components/page-shell.tsx` is the common navigation and layout for pages behind the login.
+- `components/contact-fields.tsx` is the one definition of the contact form fields and their German labels, used by capture, edit and the detail view; add a new contact field there (and in `CardFields`). `components/page-shell.tsx` is the common shell for pages behind the login (see Layout and design guide).
+
+## Layout and design guide
+
+The frontend follows the design guide in `guidelines/` (v4, German; `guidelines/README.md` holds the rules). Change tokens only in `guidelines/tokens.json` and regenerate with `node guidelines/scripts/build-tokens.mjs`, which also checks the contrasts.
+
+- **Profile `standard`** (navy primary, orange action), imported in `src/app/globals.css` together with `tokens.css` and `tailwind-theme.css`. Font Inter via `next/font`, icons Lucide (`lucide-react`).
+- Colours only as token classes (`bg-surface`, `text-muted`, `border-input`, `bg-action text-on-action` …), never Tailwind palette colours or hex values; both themes then work without `dark:` variants. The theme is `data-theme` on `<html>` via `next-themes`; the user menu offers Hell, Dunkel, System.
+- Building blocks in `components/ui.tsx`: `buttonClass(variant, size)` (classes, so links and the photo input label can use them), `inputClass`, `PageHeader`, `Panel` (`main`/`rail`), `Badge`, `ErrorNote`. One `primary` (action) button per view; destructive actions are the `danger` ghost button.
+- Shell (`components/page-shell.tsx`, client parts in `shell-client.tsx`): sidebar with navigation and user card, topbar with breadcrumbs (`crumbs` prop) and user menu, skip link to `<main id="inhalt">`. Below 1024px the sidebar is a drawer. `usePathname()` must stay inside a `<Suspense>` boundary (cacheComponents).
+- Pages: start page as work list (key figures, recently captured), list as table, detail with main area (contact data, opportunities) and a rail (card photo, Abacus, history). Rail and main area are side by side from 1280px (`xl`).
+- Text: Swiss spelling with "ss" (Strasse), guillemets «…», dates and numbers through `lib/format.ts` (de-CH, Europe/Zurich).
+- Status colours: Abacus `None` neutral, `ToImport` warning, `Imported` success. Contacts have no object numbers.
+- Deliberate deviations: no global search and no notifications in the topbar (the contact list has its own search, there is nothing to notify); form labels sit above the fields instead of in a left column, because capture happens on phones; buttons are a class helper instead of `cva`.
 
 ## Opportunities and the Abacus release
 
 Both are additions to the spec, requested later.
 
 - **Opportunities:** a contact has any number of `Opportunity` rows (`Text`, max. 200 characters, trimmed, not empty; audited). They are deleted with their contact (database cascade). OData entity set `Opportunities` with `OpportunitiesController`; an opportunity cannot be moved to another contact. They follow the visibility of their contact (see Roles and permissions).
-- **Abacus status:** `Contact.AbacusStatus` is `None`, `ToImport` (shown as "übernehmen") or `Imported` ("übernommen"), with `AbacusImportedAt` as the date of the transfer. People only switch between `None` and `ToImport`, by hand with a normal `PATCH` on the contact, because only hand-picked contacts are to be transferred. `Imported` and its date are set by the import alone; `ContactsController` refuses them from anyone else, and clears the date when a person releases an imported contact again. The transfer itself is an n8n workflow outside this repository.
+- **Abacus status:** `Contact.AbacusStatus` is `None`, `ToImport` (shown as "übernehmen") or `Imported` ("übernommen"), with `AbacusImportedAt` as the date of the transfer. People only switch between `None` and `ToImport`, by hand with a normal `PATCH` on the contact, because only hand-picked contacts are to be transferred. `Imported` and its date are set by the import alone; `ContactsController` refuses them from anyone else, and clears the date when a person releases an imported contact again. The transfer itself is an n8n workflow outside this repository; the n8n instance is the Compose project in `/home/erich/Projects/bandn8n` (renamed from `n8n-server` on 2026-10-18).
 - **Access for the import (n8n):** a request with the header `X-Api-Key: <ABACUS_API_KEY>` (`Integration:ApiKey`) is the integration, in every environment (`Auth/ApiKeyAuthHandler.cs`, role `Integration`, not a user and not stored in the user table). `Data/ContactVisibility.cs` limits it to contacts with `ToImport`, their opportunities and their photos. It is read-only, enforced centrally in `Program.cs` for every non-GET request, except actions marked `[IntegrationWrite]`. The workflow is: `GET /api/Contacts?$expand=opportunities`, transfer each contact, then `POST /api/abacus/contacts/<id>/imported` (`AbacusController`, integration only), which sets `Imported` and the date; after that the contact is no longer returned. Repeating the POST is harmless. A wrong key is a 401 and never falls back to the browser login or the developer user. An empty key disables the access; `scripts/generate-passwords.sh` creates one.
 - Frontend: both live on the contact detail page in `kontakte/[id]/contact-extras.tsx`; the list marks released contacts.
 - **Dictation:** an opportunity can be dictated in German with the browser's built-in speech recognition (Web Speech API, `lib/dictation.ts`): Chrome, Edge and Safari, not Firefox, HTTPS only. The browser usually sends the audio to its vendor for recognition, a deliberate choice, unlike the card OCR that stays on the device. One utterance per press (`continuous = false`, because continuous mode repeats text on Android); the text is appended to the field and still has to be saved.
@@ -207,4 +220,4 @@ Built but never run for real, as of 2026-10-11; treat as unverified until someon
 
 - The Microsoft Entra login end to end (callback, claims, session cookie): there is no app registration yet. Only the redirect to Microsoft was checked with placeholder values.
 - Everything that needs a browser with camera or microphone was only tested through its pure functions and the HTTP API: taking a photo, the in-browser image enhancement and OCR, dictation of opportunities, contacts and single fields. The user tried card capture on a phone; dictation has no feedback yet.
-- The n8n workflow for Abacus does not exist in this repository; the API it would use was tested with curl.
+- The n8n workflow for Abacus does not exist in this repository (n8n instance: `/home/erich/Projects/bandn8n`); the API it would use was tested with curl.
